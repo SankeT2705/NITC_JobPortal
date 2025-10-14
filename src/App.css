@@ -1,0 +1,79 @@
+/* ========================
+   Global Styling
+   ======================== */
+body {
+  font-family: "Poppins", Arial, sans-serif;
+  background-color: #f8f9fa;
+  margin: 0;
+  padding: 0;
+}
+
+a {
+  text-decoration: none;
+    color: inherit;
+}
+
+/* Navbar brand hover */
+.navbar-brand:hover {
+  color: #ffd43b !important;
+}
+
+/* Hero Section */
+.hero-section {
+  background: linear-gradient(90deg, #0056b3 0%, #0d6efd 100%);
+  color: white;
+  text-align: center;
+  padding: 6rem 2rem;
+}
+
+/* Buttons */
+.btn-warning {
+  font-weight: 600;
+  border: none;
+}
+
+.btn-warning:hover {
+  background-color: #f3c200;
+}
+
+/* Cards */
+.card {
+  border-radius: 12px;
+  transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+  transform: scale(1.02);
+}
+
+/* Auth Pages */
+.card input,
+.card select {
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.card button {
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* Footer */
+footer {
+  background-color: #002147;
+  color: white;
+  font-size: 0.9rem;
+}
+
+
+
+
+
+ 
+
+a:hover {
+  text-decoration: underline;
+  color: #0d6efd;
+}
+
+ 

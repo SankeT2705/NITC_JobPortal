@@ -1,0 +1,197 @@
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { useAuth } from "../../context/AuthContext";
+
+const AdminDashboard = () => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  // ✅ Current Admin Info
+  const currentAdmin = JSON.parse(localStorage.getItem("admin_user") || "{}");
+  const adminName = currentAdmin?.name || "Admin";
+
+  // ✅ States
+  const [jobs, setJobs] = useState([]);
+  const [stats, setStats] = useState({ activeJobs: 0, totalApplications: 0 });
+  const [loading, setLoading] = useState(true);
+
+  // ✅ Fetch Jobs + Stats
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+
+        const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
+        if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
+        // Fetch Admin Jobs
+        // ✅ Fetch only this admin’s jobs
+const jobsRes = await axios.get(`/api/jobs/admin/${currentAdmin.email}`);
+setJobs(jobsRes.data || []);
+
+// ✅ Fetch only this admin’s applications
+const appsRes = await axios.get(`/api/applications/admin/${currentAdmin.email}`);
+        setStats({
+          activeJobs: jobsRes.data?.length || 0,
+          totalApplications: appsRes.data?.length || 0,
+        });
+      } catch (err) {
+        console.error("❌ Error loading dashboard data:", err);
+        alert("Failed to load dashboard data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // ✅ Delete a Job
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this job?")) return;
+
+    try {
+      await axios.delete(`/api/jobs/${id}`);
+      alert("🗑️ Job deleted successfully!");
+      setJobs((prev) => prev.filter((job) => job._id !== id));
+      setStats((prev) => ({
+        ...prev,
+        activeJobs: prev.activeJobs - 1,
+      }));
+    } catch (err) {
+      console.error("❌ Error deleting job:", err);
+      alert("Failed to delete job.");
+    }
+  };
+
+  // ✅ Navigation
+  const handleCreateJob = () => navigate("/admin/jobs/new");
+  const goDashboard = () => navigate("/admin");
+
+  return (
+    <div className="min-vh-100 d-flex flex-column bg-light">
+      {/* ===== Navbar ===== */}
+      <nav className="navbar navbar-expand-lg navbar-dark shadow-sm" style={{ background: "#0B3D6E" }}>
+        <div className="container-fluid">
+          <span className="navbar-brand fw-semibold">NITC Job Portal Admin</span>
+          <ul className="navbar-nav ms-auto">
+            <li className="nav-item">
+              <button className="btn btn-link nav-link active" onClick={goDashboard}>
+                Dashboard
+              </button>
+            </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/admin/applications">
+                Applications
+              </Link>
+            </li>
+            <li className="nav-item">
+              <button className="btn btn-link nav-link text-warning" onClick={logout}>
+                Logout
+              </button>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
+      {/* ===== Main Content ===== */}
+      <div className="container-fluid py-4 flex-grow-1">
+        <div className="row g-4">
+          {/* Sidebar */}
+          <div className="col-lg-3">
+            <div className="card shadow-sm border-0 p-3 mb-3">
+              <h4 className="text-primary mb-2">Welcome, {adminName}</h4>
+              <p className="text-muted small mb-3">
+                Manage job postings and review applications efficiently.
+              </p>
+              <button className="btn btn-warning fw-semibold w-100" onClick={handleCreateJob}>
+                + Create New Job
+              </button>
+            </div>
+
+            {/* Stats */}
+            <div className="card shadow-sm border-0 p-3 mb-3 text-center">
+              <div className="text-muted">Active Jobs</div>
+              <div className="display-6 text-primary fw-bold">{stats.activeJobs}</div>
+            </div>
+            <div className="card shadow-sm border-0 p-3 text-center">
+              <div className="text-muted">Total Applications</div>
+              <div className="display-6 text-primary fw-bold">{stats.totalApplications}</div>
+            </div>
+          </div>
+
+          {/* Job Table */}
+          <div className="col-lg-9">
+            <div className="card shadow-sm border-0">
+              <div className="card-header bg-white">
+                <h5 className="mb-0 text-center fw-bold text-primary">Your Job Postings</h5>
+              </div>
+
+              <div className="card-body">
+                {loading ? (
+                  <p className="text-center text-muted my-4">⏳ Loading jobs...</p>
+                ) : jobs.length === 0 ? (
+                  <p className="text-center text-muted my-4">
+                    No jobs yet. Click “Create New Job” to add one.
+                  </p>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table align-middle table-hover">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Title</th>
+                          <th>Department</th>
+                          <th>Deadline</th>
+                          <th>Applicants</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {jobs.map((job) => (
+                          <tr key={job._id}>
+                            <td>{job.title}</td>
+                            <td>{job.department}</td>
+                            <td>{new Date(job.deadline).toLocaleDateString()}</td>
+                            <td>{job.applicantCount ?? 0}</td>
+                            <td className="d-flex gap-2">
+                              <button
+                                className="btn btn-outline-primary btn-sm"
+                                onClick={() => navigate(`/admin/jobs/${job._id}`)}
+                              >
+                                View
+                              </button>
+                              <button
+                                className="btn btn-outline-warning btn-sm"
+                                onClick={() => navigate(`/admin/jobs/${job._id}/edit`, { state: job })}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn btn-outline-danger btn-sm"
+                                onClick={() => handleDelete(job._id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Footer ===== */}
+      <footer className="text-center py-3 mt-auto bg-dark text-white">
+        <small>© {new Date().getFullYear()} NITC Job Portal Admin. All rights reserved.</small>
+      </footer>
+    </div>
+  );
+};
+
+export default AdminDashboard;
