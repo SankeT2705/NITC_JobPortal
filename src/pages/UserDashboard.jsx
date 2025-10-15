@@ -7,6 +7,14 @@ import axios from "axios";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  // 🔍 Job View Modal
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewJob, setViewJob] = useState(null);
+  const handleViewJob = (job) => {
+    setViewJob(job);
+    setShowViewModal(true);
+  };
 
   // ---------------- CURRENT USER ----------------
   const storedUser = JSON.parse(localStorage.getItem("current_user") || "{}");
@@ -19,78 +27,95 @@ const UserDashboard = () => {
   const userName = currentUser?.name || "User";
 
   // ---------------- NOTIFICATIONS ----------------
-const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
-useEffect(() => {
-  const fetchNotifications = async () => {
-    try {
-      axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-      const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-      if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
+        const token = JSON.parse(
+          localStorage.getItem("nitc_user") || "{}"
+        )?.token;
+        if (token)
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      if (currentUser?.email) {
-        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`);
-        setNotifications(res.data || []);
+        if (currentUser?.email) {
+          const res = await axios.get(
+            `${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`
+          );
+          setNotifications(res.data || []);
+        }
+      } catch (err) {
+        console.error("❌ Failed to load notifications:", err);
       }
-    } catch (err) {
-      console.error("❌ Failed to load notifications:", err);
-    }
-  };
+    };
 
-  fetchNotifications();
-}, [currentUser?.email]);
+    fetchNotifications();
+  }, [currentUser?.email]);
 
-// ✅ Clear notifications in backend
-const clearNotifications = async () => {
-  try {
-    axios.defaults.baseURL ="${process.env.REACT_APP_API_URL}";
-    const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-    if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-    await axios.delete(`${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`);
-    setNotifications([]);
-  } catch (err) {
-    console.error("❌ Failed to clear notifications:", err);
-  }
-};
-
-// ✅ Fetch updated applications from backend
-useEffect(() => {
-  const fetchApplications = async () => {
+  // ✅ Clear notifications in backend
+  const clearNotifications = async () => {
     try {
       axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-      const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-      if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      const token = JSON.parse(
+        localStorage.getItem("nitc_user") || "{}"
+      )?.token;
+      if (token)
+        axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/user`);
-      const backendApps = res.data || [];
-
-      // Format apps to match local UI fields
-      const formattedApps = backendApps.map((app) => ({
-        id: app._id,
-        jobId: app.jobId?._id || app.jobId,
-        title: app.jobId?.title || "N/A",
-        department: app.jobId?.department || "N/A",
-        appliedOn: new Date(app.createdAt).toLocaleDateString(),
-        status: app.status || "Pending",
-        resumeUrl: app.resumeUrl || "",
-        resumeStatus: app.resumeUrl ? "✅ Uploaded" : "❌ Not Uploaded",
-      }));
-
-      setApplications(formattedApps);
-      localStorage.setItem(`${userKey}_applications`, JSON.stringify(formattedApps));
+      await axios.delete(
+        `${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`
+      );
+      setNotifications([]);
     } catch (err) {
-      console.error("❌ Failed to load user applications:", err);
+      console.error("❌ Failed to clear notifications:", err);
     }
   };
 
-  fetchApplications();
+  // ✅ Fetch updated applications from backend
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
+        const token = JSON.parse(
+          localStorage.getItem("nitc_user") || "{}"
+        )?.token;
+        if (token)
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-  // ✅ Optional auto-refresh every 30s
-  const interval = setInterval(fetchApplications, 30000);
-  return () => clearInterval(interval);
-}, [userKey]);
+        const res = await axios.get(
+          `${process.env.REACT_APP_API_URL}/api/applications/user`
+        );
+        const backendApps = res.data || [];
 
+        // Format apps to match local UI fields
+        const formattedApps = backendApps.map((app) => ({
+          id: app._id,
+          jobId: app.jobId?._id || app.jobId,
+          title: app.jobId?.title || "N/A",
+          department: app.jobId?.department || "N/A",
+          appliedOn: new Date(app.createdAt).toLocaleDateString(),
+          status: app.status || "Pending",
+          resumeUrl: app.resumeUrl || "",
+          resumeStatus: app.resumeUrl ? "✅ Uploaded" : "❌ Not Uploaded",
+        }));
+
+        setApplications(formattedApps);
+        localStorage.setItem(
+          `${userKey}_applications`,
+          JSON.stringify(formattedApps)
+        );
+      } catch (err) {
+        console.error("❌ Failed to load user applications:", err);
+      }
+    };
+
+    fetchApplications();
+
+    // ✅ Optional auto-refresh every 30s
+    const interval = setInterval(fetchApplications, 30000);
+    return () => clearInterval(interval);
+  }, [userKey]);
 
   // ---------------- USER PROFILE ----------------
   const [profile] = useState(() => {
@@ -107,42 +132,47 @@ useEffect(() => {
   // ---------------- JOB DATA ----------------
   const [jobs, setJobs] = useState([]);
 
- useEffect(() => {
-  const fetchJobs = async () => {
-    try {
-      // ✅ Set base URL (backend)
-      axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        // ✅ Set base URL (backend)
+        axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
 
-      // ✅ Optional: Add token if user logged in
-      const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-      if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        // ✅ Optional: Add token if user logged in
+        const token = JSON.parse(
+          localStorage.getItem("nitc_user") || "{}"
+        )?.token;
+        if (token)
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs`);
-      const backendJobs = res.data || [];
+        const res = await axios.get(
+          `${process.env.REACT_APP_API_URL}/api/jobs`
+        );
+        const backendJobs = res.data || [];
 
-      // ✅ Normalize job fields for frontend consistency
-      const formatted = backendJobs.map((job) => ({
-        id: job._id, // your local code uses "id"
-        title: job.title,
-        department: job.department,
-        deadline: job.deadline?.split("T")[0] || "N/A",
-        qualifications: job.qualifications,
-        description: job.description,
-        requiredSkills: job.requiredSkills || [],
-        owner: job.owner || "unknown",
-        applicantCount: job.applicantCount || 0,
-      }));
+        // ✅ Normalize job fields for frontend consistency
+        const formatted = backendJobs.map((job) => ({
+          id: job._id, // your local code uses "id"
+          title: job.title,
+          department: job.department,
+          deadline: job.deadline?.split("T")[0] || "N/A",
+          qualifications: job.qualifications,
+          description: job.description,
+          requiredSkills: job.requiredSkills || [],
+          owner: job.owner || "unknown",
+          applicantCount: job.applicantCount || 0,
+        }));
 
-      setJobs(formatted);
-      localStorage.setItem("jobs", JSON.stringify(formatted)); // optional caching
-    } catch (err) {
-      console.error("❌ Failed to load jobs:", err);
-      alert("⚠️ Failed to load job listings. Please try again.");
-    }
-  };
+        setJobs(formatted);
+        localStorage.setItem("jobs", JSON.stringify(formatted)); // optional caching
+      } catch (err) {
+        console.error("❌ Failed to load jobs:", err);
+        alert("⚠️ Failed to load job listings. Please try again.");
+      }
+    };
 
-  fetchJobs();
-}, []);
+    fetchJobs();
+  }, []);
 
   // ---------------- FILTERS ----------------
   const [searchTerm, setSearchTerm] = useState("");
@@ -226,81 +256,93 @@ useEffect(() => {
     setShowModal(true);
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  try {
-    if (!selectedJob) {
-      alert("⚠️ No job selected.");
-      return;
+    if (loading) return; // ✅ Prevent multiple submissions
+
+    try {
+      setLoading(true); // ✅ Start loader
+
+      if (!selectedJob) {
+        alert("⚠️ No job selected.");
+        setLoading(false);
+        return;
+      }
+
+      const token = JSON.parse(
+        localStorage.getItem("nitc_user") || "{}"
+      )?.token;
+      if (!token) {
+        alert("Please log in to apply for a job.");
+        setLoading(false);
+        return;
+      }
+
+      axios.defaults.baseURL =
+        process.env.REACT_APP_API_URL || "http://localhost:5000";
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
+      // ✅ Prepare backend payload
+      const payload = {
+        jobId: selectedJob.id,
+        coverLetter: formData.coverLetter,
+        resumeUrl: formData.resumeFile,
+      };
+
+      const res = await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/applications/apply`,
+        payload
+      );
+      console.log("✅ Application submitted:", res.data);
+
+      alert(`✅ Application submitted successfully for: ${selectedJob.title}`);
+
+      const newApplication = {
+        id: res.data.application._id,
+        jobId: selectedJob.id,
+        title: selectedJob.title,
+        department: selectedJob.department,
+        applicant: currentUser.email,
+        applicantName: currentUser.name,
+        coverLetter: formData.coverLetter,
+        resumeUrl: formData.resumeFile,
+        status: "Pending",
+        appliedOn: new Date().toLocaleDateString(),
+      };
+
+      const nextApps = [...applications, newApplication];
+      setApplications(nextApps);
+      localStorage.setItem(`${userKey}_applications`, JSON.stringify(nextApps));
+
+      // ✅ Reset form + close modal
+      setFormData({ name: "", email: "", resumeFile: null, coverLetter: "" });
+      setShowModal(false);
+    } catch (err) {
+      console.error("❌ Application submit failed:", err);
+      alert("❌ Failed to submit application. Please try again.");
+    } finally {
+      setLoading(false); // ✅ Always stop loader
     }
+  };
 
-    const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-    if (!token) {
-      alert("Please log in to apply for a job.");
-      return;
+  // Handle input change
+  const handleChange = (e) => {
+    const { name, value, files } = e.target;
+
+    if (name === "resume" && files && files[0]) {
+      const file = files[0];
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, resumeFile: reader.result })); // Base64 data URL
+      };
+
+      reader.readAsDataURL(file); // Converts file to Base64
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
-
-    axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-    // ✅ Prepare backend payload
-    const payload = {
-      jobId: selectedJob.id,
-      coverLetter: formData.coverLetter,
-      resumeUrl: formData.resumeFile, // base64 string
-    };
-
-    const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/applications/apply`, payload);
-    console.log("✅ Application submitted:", res.data);
-
-    alert(`✅ Application submitted successfully for: ${selectedJob.title}`);
-
-    // ✅ Update frontend state for instant feedback
-    const newApplication = {
-      id: res.data.application._id,
-      jobId: selectedJob.id,
-      title: selectedJob.title,
-      department: selectedJob.department,
-      applicant: currentUser.email,
-      applicantName: currentUser.name,
-      coverLetter: formData.coverLetter,
-      resumeUrl: formData.resumeFile,
-      status: "Pending",
-      appliedOn: new Date().toLocaleDateString(),
-    };
-
-    const nextApps = [...applications, newApplication];
-    setApplications(nextApps);
-    localStorage.setItem(`${userKey}_applications`, JSON.stringify(nextApps));
-
-    // ✅ Reset form and close modal
-    setFormData({ name: "", email: "", resumeFile: null, coverLetter: "" });
-    setShowModal(false);
-  } catch (err) {
-    console.error("❌ Application submit failed:", err);
-    alert("❌ Failed to submit application. Please try again.");
-  }
-};
-
- // Handle input change
- const handleChange = (e) => {
-  const { name, value, files } = e.target;
-
-  if (name === "resume" && files && files[0]) {
-    const file = files[0];
-    const reader = new FileReader();
-
-    reader.onloadend = () => {
-      setFormData((prev) => ({ ...prev, resumeFile: reader.result })); // Base64 data URL
-    };
-
-    reader.readAsDataURL(file); // Converts file to Base64
-  } else {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  }
-};
-
+  };
 
   // ---------------- LOGOUT ----------------
   const handleLogout = () => {
@@ -313,36 +355,50 @@ useEffect(() => {
       {/* Navbar */}
       <nav className="navbar navbar-expand-lg navbar-dark bg-primary px-4">
         <div className="container-fluid">
-          <span className="navbar-brand fw-semibold">
-            NITC Job Portal
-          </span>
+          <span className="navbar-brand fw-semibold">NITC Job Portal</span>
 
-          <ul className="navbar-nav ms-auto">
-            <li className="nav-item">
-              <Link className="nav-link active" to="/dashboard-user">
-                Dashboard
-              </Link>
-            </li>
-            <li className="nav-item">
-              <Link className="nav-link" to="/profile-user">
-                Profile
-              </Link>
-            </li>
-            <li className="nav-item">
-              <button
-                className="btn btn-link nav-link text-danger"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </li>
-            <li className="nav-item d-flex align-items-center me-3">
-              <NotificationBell
-                notifications={notifications}
-                onClear={clearNotifications}
-              />
-            </li>
-          </ul>
+          {/* 🔽 Add Toggler for mobile */}
+          <button
+            className="navbar-toggler"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span className="navbar-toggler-icon"></span>
+          </button>
+
+          {/* 🔽 Wrap nav links inside collapse container */}
+          <div className="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul className="navbar-nav ms-auto align-items-center">
+              <li className="nav-item">
+                <Link className="nav-link active" to="/dashboard-user">
+                  Dashboard
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link className="nav-link" to="/profile-user">
+                  Profile
+                </Link>
+              </li>
+              <li className="nav-item d-flex align-items-center">
+                <NotificationBell
+                  notifications={notifications}
+                  onClear={clearNotifications}
+                />
+              </li>
+              <li className="nav-item">
+                <button
+                  className="btn btn-link nav-link text-danger"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
       </nav>
 
@@ -393,8 +449,12 @@ useEffect(() => {
                       <div className="col-md-6 mb-3" key={job.id}>
                         <div className="card h-100 border shadow-sm">
                           <div className="card-body">
-                            <h6 className="fw-bold text-primary">{job.title}</h6>
-                            <p className="text-muted small mb-1">{job.department}</p>
+                            <h6 className="fw-bold text-primary">
+                              {job.title}
+                            </h6>
+                            <p className="text-muted small mb-1">
+                              {job.department}
+                            </p>
                             <p className="mb-2">
                               <strong>Deadline:</strong> {job.deadline}
                             </p>
@@ -469,9 +529,19 @@ useEffect(() => {
                             <td>{job.title}</td>
                             <td>{job.deadline}</td>
                             <td>{job.department}</td>
-                            <td>
+                            <td className="d-flex flex-wrap gap-2">
+                              <button
+                                className="btn btn-info btn-sm"
+                                onClick={() => handleViewJob(job)}
+                              >
+                                View
+                              </button>
+
                               {applied ? (
-                                <button className="btn btn-success btn-sm" disabled>
+                                <button
+                                  className="btn btn-success btn-sm"
+                                  disabled
+                                >
                                   Applied
                                 </button>
                               ) : (
@@ -533,15 +603,19 @@ useEffect(() => {
                                 {app.status}
                               </span>
                             </td>
-                             <td>
-  {app.resumeUrl ? (
-    <a href={app.resumeUrl} target="_blank" rel="noopener noreferrer">
-      📄 View Resume
-    </a>
-  ) : (
-    "❌ Not Uploaded"
-  )}
-</td>
+                            <td>
+                              {app.resumeUrl ? (
+                                <a
+                                  href={app.resumeUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  📄 View Resume
+                                </a>
+                              ) : (
+                                "❌ Not Uploaded"
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -553,6 +627,53 @@ useEffect(() => {
           </div>
         </div>
       </div>
+      {/* View Job Details Modal */}
+      <Modal
+        show={showViewModal}
+        onHide={() => setShowViewModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Job Details</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {viewJob ? (
+            <>
+              <h5 className="fw-bold text-primary mb-2">{viewJob.title}</h5>
+              <p className="mb-1">
+                <strong>Department:</strong> {viewJob.department}
+              </p>
+              <p className="mb-1">
+                <strong>Deadline:</strong> {viewJob.deadline}
+              </p>
+              <hr />
+              <p>
+                <strong>Description:</strong>
+              </p>
+              <p className="text-muted">{viewJob.description}</p>
+              <p>
+                <strong>Qualifications:</strong>
+              </p>
+              <p className="text-muted">{viewJob.qualifications}</p>
+              <p>
+                <strong>Required Skills:</strong>
+              </p>
+              <p className="text-muted">
+                {viewJob.requiredSkills && viewJob.requiredSkills.length > 0
+                  ? viewJob.requiredSkills.join(", ")
+                  : "Not specified"}
+              </p>
+            </>
+          ) : (
+            <p className="text-muted">No job details available.</p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowViewModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* Apply Modal */}
       <Modal show={showModal} onHide={() => setShowModal(false)} centered>
@@ -606,8 +727,18 @@ useEffect(() => {
             <Button variant="secondary" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary">
-              Submit Application
+            <Button type="submit" variant="primary" disabled={loading}>
+              {loading ? (
+                <>
+                  <span
+                    className="spinner-border spinner-border-sm me-2"
+                    role="status"
+                  />
+                  Submitting...
+                </>
+              ) : (
+                "Submit Application"
+              )}
             </Button>
           </Modal.Footer>
         </Form>
