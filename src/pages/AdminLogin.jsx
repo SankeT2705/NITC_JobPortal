@@ -69,10 +69,7 @@ console.log("API URL:", process.env.REACT_APP_API_URL);
           </button>
         </form>
         <div className="text-center">
-          <small>
-            Don’t have an admin account?{" "}
-            <Link to="/register-admin">Register</Link>
-          </small>
+          
         </div>
       </div>
     </div>

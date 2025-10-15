@@ -23,10 +23,7 @@ const LoginSelection = () => {
             <Link to="/register-user" className="text-decoration-none">
               Register as User
             </Link>
-            {" "}or{" "}
-            <Link to="/register-admin" className="text-decoration-none">
-              Register as Admin
-            </Link>
+             
           </small>
         </div>
       </div>
