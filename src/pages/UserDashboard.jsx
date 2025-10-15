@@ -19,18 +19,17 @@ const UserDashboard = () => {
   const userName = currentUser?.name || "User";
 
   // ---------------- NOTIFICATIONS ----------------
-  // ---------------- NOTIFICATIONS ----------------
 const [notifications, setNotifications] = useState([]);
 
 useEffect(() => {
   const fetchNotifications = async () => {
     try {
-      axios.defaults.baseURL = "http://localhost:5000";
+      axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
       const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
       if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       if (currentUser?.email) {
-        const res = await axios.get(`/api/notifications/${currentUser.email}`);
+        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`);
         setNotifications(res.data || []);
       }
     } catch (err) {
@@ -44,25 +43,26 @@ useEffect(() => {
 // ✅ Clear notifications in backend
 const clearNotifications = async () => {
   try {
-    axios.defaults.baseURL ="http://localhost:5000";
+    axios.defaults.baseURL ="${process.env.REACT_APP_API_URL}";
     const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
     if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-    await axios.delete(`/api/notifications/${currentUser.email}`);
+    await axios.delete(`${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`);
     setNotifications([]);
   } catch (err) {
     console.error("❌ Failed to clear notifications:", err);
   }
 };
+
 // ✅ Fetch updated applications from backend
 useEffect(() => {
   const fetchApplications = async () => {
     try {
-      axios.defaults.baseURL = "http://localhost:5000";
+      axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
       const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
       if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      const res = await axios.get("/api/applications/user");
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/user`);
       const backendApps = res.data || [];
 
       // Format apps to match local UI fields
@@ -111,13 +111,13 @@ useEffect(() => {
   const fetchJobs = async () => {
     try {
       // ✅ Set base URL (backend)
-      axios.defaults.baseURL = "http://localhost:5000";
+      axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
 
       // ✅ Optional: Add token if user logged in
       const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
       if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      const res = await axios.get("/api/jobs");
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs`);
       const backendJobs = res.data || [];
 
       // ✅ Normalize job fields for frontend consistency
@@ -241,7 +241,7 @@ useEffect(() => {
       return;
     }
 
-    axios.defaults.baseURL = "http://localhost:5000";
+    axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
     axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
     // ✅ Prepare backend payload
@@ -251,7 +251,7 @@ useEffect(() => {
       resumeUrl: formData.resumeFile, // base64 string
     };
 
-    const res = await axios.post("/api/applications/apply", payload);
+    const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/applications/apply`, payload);
     console.log("✅ Application submitted:", res.data);
 
     alert(`✅ Application submitted successfully for: ${selectedJob.title}`);

@@ -31,6 +31,7 @@ const AdminLogin = () => {
       setLoading(false);
     }
   };
+console.log("API URL:", process.env.REACT_APP_API_URL);
 
   return (
     <div className="d-flex justify-content-center align-items-center vh-100 bg-light">

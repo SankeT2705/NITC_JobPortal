@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
   });
 
   // ✅ Setup axios baseURL (connect to backend)
-  axios.defaults.baseURL = "http://localhost:5000"; // your backend URL
+  axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}"; // your backend URL
 
   // ✅ Set Authorization header globally
   useEffect(() => {
@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (role, email, password) => {
     try {
       // Both users & admins use the same route
-      const res = await axios.post("/api/auth/login", { email, password });
+      const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/login`, { email, password });
 
       const loggedInUser = res.data;
 
@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (data, role = "user") => {
     try {
       const payload = { ...data, role };
-      const res = await axios.post("/api/auth/register", payload);
+      const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/register`, payload);
       return res.data;
     } catch (err) {
       console.error("❌ Registration failed:", err.response?.data || err.message);

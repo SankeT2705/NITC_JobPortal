@@ -27,11 +27,11 @@ const AdminDashboard = () => {
 
         // Fetch Admin Jobs
         // ✅ Fetch only this admin’s jobs
-const jobsRes = await axios.get(`/api/jobs/admin/${currentAdmin.email}`);
+const jobsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/admin/${currentAdmin.email}`);
 setJobs(jobsRes.data || []);
 
 // ✅ Fetch only this admin’s applications
-const appsRes = await axios.get(`/api/applications/admin/${currentAdmin.email}`);
+const appsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/admin/${currentAdmin.email}`);
         setStats({
           activeJobs: jobsRes.data?.length || 0,
           totalApplications: appsRes.data?.length || 0,
@@ -52,7 +52,7 @@ const appsRes = await axios.get(`/api/applications/admin/${currentAdmin.email}`)
     if (!window.confirm("Are you sure you want to delete this job?")) return;
 
     try {
-      await axios.delete(`/api/jobs/${id}`);
+      await axios.delete(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`);
       alert("🗑️ Job deleted successfully!");
       setJobs((prev) => prev.filter((job) => job._id !== id));
       setStats((prev) => ({

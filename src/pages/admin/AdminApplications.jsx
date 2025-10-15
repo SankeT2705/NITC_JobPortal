@@ -21,7 +21,7 @@ const AdminApplications = () => {
 
       console.log("📨 Fetching applications for admin:", adminUser.email);
 
-      const res = await axios.get(`/api/applications/admin/${adminUser.email}`);
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/admin/${adminUser.email}`);
       setApplications(res.data || []);
     } catch (err) {
       console.error("Error fetching applications:", err);
@@ -46,16 +46,16 @@ const updateStatus = async (id, status) => {
     }
 
     // ✅ Always attach Authorization header before request
-    axios.defaults.baseURL = "http://localhost:5000";
+    axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
     axios.defaults.headers.common["Authorization"] = `Bearer ${adminToken}`;
 
-    const res = await axios.put(`/api/applications/${id}/status`, { status });
+    const res = await axios.put(`${process.env.REACT_APP_API_URL}/api/applications/${id}/status`, { status });
 
     alert(`✅ Application marked as ${status}`);
     console.log("✅ Status updated:", res.data);
 
     // Refresh list after update
-    const refreshed = await axios.get(`/api/applications/admin/${adminUser.email}`);
+    const refreshed = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/admin/${adminUser.email}`);
     setApplications(refreshed.data || []);
   } catch (err) {
     console.error("❌ Status update failed:", err);

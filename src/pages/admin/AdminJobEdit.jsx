@@ -24,7 +24,7 @@ const AdminJobEdit = () => {
         const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
         if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-        const res = await axios.get(`/api/jobs/${id}`);
+        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`);
         const job = res.data;
 
         setForm({
@@ -59,7 +59,7 @@ const AdminJobEdit = () => {
       if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       const updatedData = { ...form };
-      await axios.put(`/api/jobs/${id}`, updatedData);
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`, updatedData);
 
       alert("✅ Job updated successfully!");
       navigate("/admin");

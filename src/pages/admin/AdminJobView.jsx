@@ -24,7 +24,7 @@ const AdminJobView = () => {
         const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
         if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-        const res = await axios.get(`/api/jobs/${id}`);
+        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`);
         setJob(res.data);
       } catch (err) {
         console.error("❌ Error fetching job:", err);

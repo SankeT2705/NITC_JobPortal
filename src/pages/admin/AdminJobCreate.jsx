@@ -22,7 +22,7 @@ const AdminJobCreate = () => {
     const fetchJob = async () => {
       if (!isEdit) return;
       try {
-        const res = await axios.get(`/api/jobs/${id}`);
+        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`);
         const job = res.data;
         setForm({
           title: job.title,
@@ -58,10 +58,10 @@ const AdminJobCreate = () => {
       const payload = { ...form };
 
       if (isEdit) {
-        await axios.put(`/api/jobs/${id}`, payload);
+        await axios.put(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`, payload);
         alert("✅ Job Updated Successfully!");
       } else {
-        await axios.post("/api/jobs", payload);
+        await axios.post(`${process.env.REACT_APP_API_URL}/api/jobs`, payload);
         alert("✅ Job Created Successfully!");
       }
 
