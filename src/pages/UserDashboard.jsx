@@ -1,4 +1,11 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+  useDeferredValue,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
@@ -7,8 +14,10 @@ import NotificationBell from "../components/NotificationBell";
 import axios from "axios";
 
 /** ---------- stable helpers ---------- */
-const getEnvApi = () => process.env.REACT_APP_API_URL || "http://localhost:5000";
-const getToken = () => JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token || null;
+const getEnvApi = () =>
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+const getToken = () =>
+  JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token || null;
 
 /** create a local axios client (doesn't mutate global defaults) */
 const useAxiosClient = () => {
@@ -26,6 +35,7 @@ const useAxiosClient = () => {
 const UserDashboard = React.memo(function UserDashboard() {
   const navigate = useNavigate();
   const api = useAxiosClient();
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   /** ---------- user bootstrap (memoized) ---------- */
   const storedUser = useMemo(
@@ -62,7 +72,9 @@ const UserDashboard = React.memo(function UserDashboard() {
     (async () => {
       try {
         if (!currentUser?.email) return;
-        const { data } = await api.get(`/api/notifications/${currentUser.email}`);
+        const { data } = await api.get(
+          `/api/notifications/${currentUser.email}`
+        );
         if (!cancelled) setNotifications(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("Failed to load notifications:", e);
@@ -137,7 +149,10 @@ const UserDashboard = React.memo(function UserDashboard() {
 
   // write-through cache only when apps actually change
   useEffect(() => {
-    localStorage.setItem(`${userKey}_applications`, JSON.stringify(applications));
+    localStorage.setItem(
+      `${userKey}_applications`,
+      JSON.stringify(applications)
+    );
   }, [applications, userKey]);
 
   // fetch from backend + optional polling
@@ -165,7 +180,11 @@ const UserDashboard = React.memo(function UserDashboard() {
           const sameLength = prev.length === formattedApps.length;
           const sameIds =
             sameLength &&
-            prev.every((p, i) => p.id === formattedApps[i]?.id && p.status === formattedApps[i]?.status);
+            prev.every(
+              (p, i) =>
+                p.id === formattedApps[i]?.id &&
+                p.status === formattedApps[i]?.status
+            );
           if (!sameIds) setApplications(formattedApps);
         }
       } catch (e) {
@@ -326,7 +345,9 @@ const UserDashboard = React.memo(function UserDashboard() {
           resumeUrl: formData.resumeFile,
         };
         const { data } = await api.post(`/api/applications/apply`, payload);
-        alert(`✅ Application submitted successfully for: ${selectedJob.title}`);
+        alert(
+          `✅ Application submitted successfully for: ${selectedJob.title}`
+        );
 
         const newApplication = {
           id: data?.application?._id,
@@ -356,7 +377,16 @@ const UserDashboard = React.memo(function UserDashboard() {
         setLoading(false);
       }
     },
-    [api, currentUser.email, currentUser.name, formData.coverLetter, formData.resumeFile, loading, selectedJob, userKey]
+    [
+      api,
+      currentUser.email,
+      currentUser.name,
+      formData.coverLetter,
+      formData.resumeFile,
+      loading,
+      selectedJob,
+      userKey,
+    ]
   );
 
   /** ---------- logout ---------- */
@@ -364,6 +394,19 @@ const UserDashboard = React.memo(function UserDashboard() {
     localStorage.removeItem("current_user");
     navigate("/");
   }, [navigate]);
+
+  const handleViewResume = useCallback((url) => {
+    if (!url) {
+      alert("⚠️ No resume found for this applicant.");
+      return;
+    }
+    setPreviewUrl(url);
+    // Scroll smoothly to preview area
+    setTimeout(() => {
+      const preview = document.getElementById("resume-preview");
+      if (preview) preview.scrollIntoView({ behavior: "smooth" });
+    }, 200);
+  }, []);
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -396,10 +439,16 @@ const UserDashboard = React.memo(function UserDashboard() {
                 </Link>
               </li>
               <li className="nav-item d-flex align-items-center">
-                <NotificationBell notifications={notifications} onClear={clearNotifications} />
+                <NotificationBell
+                  notifications={notifications}
+                  onClear={clearNotifications}
+                />
               </li>
               <li className="nav-item">
-                <button className="btn btn-link nav-link text-danger" onClick={handleLogout}>
+                <button
+                  className="btn btn-link nav-link text-danger"
+                  onClick={handleLogout}
+                >
                   Logout
                 </button>
               </li>
@@ -415,7 +464,9 @@ const UserDashboard = React.memo(function UserDashboard() {
           <div className="col-md-3 mb-4">
             <div className="card shadow-sm border-0 mb-3 p-3">
               <h5 className="text-primary">Welcome, {userName}</h5>
-              <p className="text-muted small">Browse jobs and apply online easily.</p>
+              <p className="text-muted small">
+                Browse jobs and apply online easily.
+              </p>
             </div>
             <div className="card text-center shadow-sm border-0 mb-3 p-3">
               <h6>Applications Made</h6>
@@ -440,22 +491,33 @@ const UserDashboard = React.memo(function UserDashboard() {
             {/* Recommended Jobs */}
             {userSkills.length > 0 && recommendedJobs.length > 0 && (
               <div className="card shadow-sm border-0 mb-4">
-                <div className="card-header bg-light fw-semibold fs-5">Recommended Jobs for You</div>
+                <div className="card-header bg-light fw-semibold fs-5">
+                  Recommended Jobs for You
+                </div>
                 <div className="card-body">
                   <div className="text-muted small mb-2">
-                    Recommendations improve when admins specify <em>Required Skills</em>.
+                    Recommendations improve when admins specify{" "}
+                    <em>Required Skills</em>.
                   </div>
                   <div className="row">
                     {recommendedJobs.map((job) => (
                       <div className="col-md-6 mb-3" key={job.id}>
                         <div className="card h-100 border shadow-sm">
                           <div className="card-body">
-                            <h6 className="fw-bold text-primary">{job.title}</h6>
-                            <p className="text-muted small mb-1">{job.department}</p>
+                            <h6 className="fw-bold text-primary">
+                              {job.title}
+                            </h6>
+                            <p className="text-muted small mb-1">
+                              {job.department}
+                            </p>
                             <p className="mb-2">
                               <strong>Deadline:</strong> {job.deadline}
                             </p>
-                            <Button variant="outline-primary" size="sm" onClick={() => openApply(job)}>
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => openApply(job)}
+                            >
                               Apply Now
                             </Button>
                           </div>
@@ -514,22 +576,33 @@ const UserDashboard = React.memo(function UserDashboard() {
                       </tr>
                     ) : (
                       filteredJobs.map((job) => {
-                        const applied = applications.some((app) => app.jobId === job.id);
+                        const applied = applications.some(
+                          (app) => app.jobId === job.id
+                        );
                         return (
                           <tr key={job.id}>
                             <td>{job.title}</td>
                             <td>{job.deadline}</td>
                             <td>{job.department}</td>
                             <td className="d-flex flex-wrap gap-2">
-                              <button className="btn btn-info btn-sm" onClick={() => handleViewJob(job)}>
+                              <button
+                                className="btn btn-info btn-sm"
+                                onClick={() => handleViewJob(job)}
+                              >
                                 View
                               </button>
                               {applied ? (
-                                <button className="btn btn-success btn-sm" disabled>
+                                <button
+                                  className="btn btn-success btn-sm"
+                                  disabled
+                                >
                                   Applied
                                 </button>
                               ) : (
-                                <button className="btn btn-outline-primary btn-sm" onClick={() => openApply(job)}>
+                                <button
+                                  className="btn btn-outline-primary btn-sm"
+                                  onClick={() => openApply(job)}
+                                >
                                   Apply
                                 </button>
                               )}
@@ -545,10 +618,14 @@ const UserDashboard = React.memo(function UserDashboard() {
 
             {/* Application History */}
             <div className="card shadow-sm border-0">
-              <div className="card-header bg-light fw-semibold fs-5">Application History</div>
+              <div className="card-header bg-light fw-semibold fs-5">
+                Application History
+              </div>
               <div className="card-body">
                 {applications.length === 0 ? (
-                  <p className="text-muted text-center mb-0">No applications submitted yet.</p>
+                  <p className="text-muted text-center mb-0">
+                    No applications submitted yet.
+                  </p>
                 ) : (
                   <div className="table-responsive">
                     <table className="table table-hover align-middle">
@@ -582,11 +659,17 @@ const UserDashboard = React.memo(function UserDashboard() {
                             </td>
                             <td>
                               {app.resumeUrl ? (
-                                <a href={app.resumeUrl} target="_blank" rel="noopener noreferrer">
-                                  📄 View Resume
-                                </a>
+                                <Button
+                                  variant="outline-primary"
+                                  size="sm"
+                                  onClick={() => handleViewResume(app.resumeUrl)}
+                                >
+                                  View
+                                </Button>
                               ) : (
-                                "❌ Not Uploaded"
+                                <span className="text-muted small">
+                                  No resume
+                                </span>
                               )}
                             </td>
                           </tr>
@@ -600,9 +683,43 @@ const UserDashboard = React.memo(function UserDashboard() {
           </div>
         </div>
       </div>
+      {previewUrl && (
+  <div
+    id="resume-preview"
+    className="mt-4 card shadow-sm border-0 p-3"
+  >
+    <h6 className="fw-bold text-primary mb-3">
+      Resume Preview
+    </h6>
+    <iframe
+      src={previewUrl}
+      title="Resume Preview"
+      width="100%"
+      height="600px"
+      style={{
+        border: "2px solid #0B3D6E",
+        borderRadius: "6px",
+        backgroundColor: "#f8f9fa",
+      }}
+    ></iframe>
+    <div className="text-end mt-2">
+      <Button
+        variant="outline-secondary"
+        size="sm"
+        onClick={() => setPreviewUrl(null)}
+      >
+        Close Preview
+      </Button>
+    </div>
+  </div>
+)}
 
       {/* View Job Details Modal */}
-      <Modal show={showViewModal} onHide={() => setShowViewModal(false)} centered>
+      <Modal
+        show={showViewModal}
+        onHide={() => setShowViewModal(false)}
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>Job Details</Modal.Title>
         </Modal.Header>
@@ -654,15 +771,32 @@ const UserDashboard = React.memo(function UserDashboard() {
           <Modal.Body>
             <Form.Group className="mb-3">
               <Form.Label>Full Name</Form.Label>
-              <Form.Control type="text" name="name" value={formData.name} onChange={handleChange} required />
+              <Form.Control
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+              />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Email</Form.Label>
-              <Form.Control type="email" name="email" value={formData.email} onChange={handleChange} required />
+              <Form.Control
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+              />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Upload Resume</Form.Label>
-              <Form.Control type="file" name="resume" accept=".pdf,.doc,.docx" onChange={handleChange} />
+              <Form.Control
+                type="file"
+                name="resume"
+                accept=".pdf,.doc,.docx"
+                onChange={handleChange}
+              />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Cover Letter</Form.Label>
@@ -683,7 +817,10 @@ const UserDashboard = React.memo(function UserDashboard() {
             <Button type="submit" variant="primary" disabled={loading}>
               {loading ? (
                 <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" />
+                  <span
+                    className="spinner-border spinner-border-sm me-2"
+                    role="status"
+                  />
                   Submitting...
                 </>
               ) : (

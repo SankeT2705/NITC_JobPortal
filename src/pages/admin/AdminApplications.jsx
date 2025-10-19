@@ -30,6 +30,7 @@ const AdminApplications = React.memo(function AdminApplications() {
   const [selectedApp, setSelectedApp] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const mountedRef = useRef(true);
 
@@ -51,9 +52,7 @@ const AdminApplications = React.memo(function AdminApplications() {
     setErrorMsg("");
 
     try {
-      const res = await axios.get(
-        `/api/applications/admin/${adminUser.email}`
-      );
+      const res = await axios.get(`/api/applications/admin/${adminUser.email}`);
       if (!mountedRef.current) return;
       setApplications(res.data || []);
     } catch (err) {
@@ -90,14 +89,11 @@ const AdminApplications = React.memo(function AdminApplications() {
           status,
         });
 
-       
         console.log("✅ Status updated:", res.data);
 
         // Update local state instead of refetching whole list
         setApplications((prev) =>
-          prev.map((app) =>
-            app._id === id ? { ...app, status: status } : app
-          )
+          prev.map((app) => (app._id === id ? { ...app, status: status } : app))
         );
 
         // If modal is open and same app updated, reflect immediately
@@ -128,6 +124,18 @@ const AdminApplications = React.memo(function AdminApplications() {
     localStorage.removeItem("nitc_user");
     navigate("/");
   }, [navigate]);
+  const handleViewResume = useCallback((url) => {
+    if (!url) {
+      alert("⚠️ No resume found for this applicant.");
+      return;
+    }
+    setPreviewUrl(url);
+    // Scroll smoothly to preview area
+    setTimeout(() => {
+      const preview = document.getElementById("resume-preview");
+      if (preview) preview.scrollIntoView({ behavior: "smooth" });
+    }, 200);
+  }, []);
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -171,10 +179,10 @@ const AdminApplications = React.memo(function AdminApplications() {
 
         <div className="card shadow-sm border-0">
           <div className="card-header bg-white d-flex justify-content-between align-items-center">
-            <h5 className="mb-0 fw-bold text-primary">
-              Applications Overview
-            </h5>
-            <span className="badge bg-secondary">{applications.length} Total</span>
+            <h5 className="mb-0 fw-bold text-primary">Applications Overview</h5>
+            <span className="badge bg-secondary">
+              {applications.length} Total
+            </span>
           </div>
 
           <div className="card-body">
@@ -228,15 +236,13 @@ const AdminApplications = React.memo(function AdminApplications() {
                         </td>
                         <td>
                           {a.resumeUrl ? (
-                            <a
-                              href={a.resumeUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn btn-sm btn-outline-primary"
-                              download={`Resume_${a.applicant?.name || "user"}.pdf`}
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => handleViewResume(a.resumeUrl)}
                             >
                               View
-                            </a>
+                            </Button>
                           ) : (
                             <span className="text-muted small">No resume</span>
                           )}
@@ -275,6 +281,36 @@ const AdminApplications = React.memo(function AdminApplications() {
           </div>
         </div>
       </div>
+       {previewUrl && (
+  <div
+    id="resume-preview"
+    className="mt-4 card shadow-sm border-0 p-3"
+  >
+    <h6 className="fw-bold text-primary mb-3">
+      Resume Preview
+    </h6>
+    <iframe
+      src={previewUrl}
+      title="Resume Preview"
+      width="100%"
+      height="600px"
+      style={{
+        border: "2px solid #0B3D6E",
+        borderRadius: "6px",
+        backgroundColor: "#f8f9fa",
+      }}
+    ></iframe>
+    <div className="text-end mt-2">
+      <Button
+        variant="outline-secondary"
+        size="sm"
+        onClick={() => setPreviewUrl(null)}
+      >
+        Close Preview
+      </Button>
+    </div>
+  </div>
+)}
 
       {/* ===== Modal ===== */}
       <Modal
@@ -322,9 +358,11 @@ const AdminApplications = React.memo(function AdminApplications() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-outline-primary"
-                    download={`Resume_${selectedApp.applicant?.name || "user"}.pdf`}
+                    download={`Resume_${
+                      selectedApp.applicant?.name || "user"
+                    }.pdf`}
                   >
-                    View Resume
+                    Download Resume
                   </a>
                 </div>
               )}
