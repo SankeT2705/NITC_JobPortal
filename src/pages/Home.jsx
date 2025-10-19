@@ -1,11 +1,17 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
+// Needed for navbar toggler (collapse) to work:
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
+// Needed for the <i className="bi ..."> icons to render:
+import "bootstrap-icons/font/bootstrap-icons.css";
 
-const Home = () => {
+const Home = React.memo(function Home() {
+  const currentYear = new Date().getFullYear();
+
   return (
+    
     <div className="d-flex flex-column min-vh-100">
-
       {/* Navbar */}
       <nav className="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
         <div className="container">
@@ -26,7 +32,7 @@ const Home = () => {
           <div className="collapse navbar-collapse justify-content-end" id="navbarNav">
             <ul className="navbar-nav">
               <li className="nav-item">
-                <Link className="nav-link active" to="/">
+                <Link className="nav-link active" aria-current="page" to="/">
                   Home
                 </Link>
               </li>
@@ -35,7 +41,6 @@ const Home = () => {
                   Login
                 </Link>
               </li>
-              
               <li className="nav-item">
                 <Link className="nav-link" to="/">
                   Contact
@@ -49,15 +54,15 @@ const Home = () => {
       {/* Hero Section */}
       <section className="bg-primary text-white text-center d-flex flex-column justify-content-center align-items-center flex-grow-1 py-5 px-3">
         <div className="container">
-          <h1 className="display-5 fw-bold mb-3">
-            Welcome to NITC Job Portal
-          </h1>
+          <h1 className="display-5 fw-bold mb-3">Welcome to NITC Job Portal</h1>
           <p className="lead mb-4 mx-auto" style={{ maxWidth: "700px" }}>
             A centralized recruitment platform for posting jobs, applying online,
             and managing the hiring process seamlessly at NIT Calicut.
           </p>
           <p className="lead mb-4 mx-auto">
-                <Link className="nav-link" to="/select-login">Lets Start..</Link>
+            <Link className="nav-link" to="/select-login">
+              Lets Start..
+            </Link>
           </p>
         </div>
       </section>
@@ -71,8 +76,7 @@ const Home = () => {
                 <i className="bi bi-person-badge fs-1 text-primary mb-3"></i>
                 <h5 className="card-title">For Job Seekers</h5>
                 <p className="card-text text-muted">
-                  Browse job openings, apply online, and track your application
-                  status all in one place.
+                  Browse job openings, apply online, and track your application status all in one place.
                 </p>
               </div>
             </div>
@@ -83,8 +87,7 @@ const Home = () => {
                 <i className="bi bi-briefcase fs-1 text-primary mb-3"></i>
                 <h5 className="card-title">For Admins</h5>
                 <p className="card-text text-muted">
-                  Post jobs, manage applications, and find the best candidates
-                  through an organized dashboard.
+                  Post jobs, manage applications, and find the best candidates through an organized dashboard.
                 </p>
               </div>
             </div>
@@ -95,8 +98,7 @@ const Home = () => {
                 <i className="bi bi-envelope-check fs-1 text-primary mb-3"></i>
                 <h5 className="card-title">Smart Notifications</h5>
                 <p className="card-text text-muted">
-                  Get instant email updates for job matches, status changes, and
-                  new opportunities.
+                  Get instant email updates for job matches, status changes, and new opportunities.
                 </p>
               </div>
             </div>
@@ -106,13 +108,10 @@ const Home = () => {
 
       {/* Footer */}
       <footer className="bg-dark text-white text-center py-3 mt-auto">
-        <small>
-          © {new Date().getFullYear()} NIT Calicut — Job Portal | Designed by
-          Team 6
-        </small>
+        <small>© {currentYear} NIT Calicut — Job Portal | Designed by Team 6</small>
       </footer>
     </div>
   );
-};
+});
 
 export default Home;

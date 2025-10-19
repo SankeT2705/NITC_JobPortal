@@ -1,24 +1,38 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Modal, Button, Form } from "react-bootstrap";
 import { useAuth } from "../context/AuthContext";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
-const UserProfile = () => {
+const UserProfile = React.memo(function UserProfile() {
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  // ✅ Load current_user and refresh from users list for accuracy
-  const storedUser = JSON.parse(localStorage.getItem("current_user") || "{}");
-  const allUsers = JSON.parse(localStorage.getItem("users") || "[]");
-  const currentUser =
-    allUsers.find((u) => u.email === storedUser.email) || storedUser;
+  /** ---------------- Load Current User (memoized) ---------------- */
+  const storedUser = useMemo(
+    () => JSON.parse(localStorage.getItem("current_user") || "{}"),
+    []
+  );
+  const allUsers = useMemo(
+    () => JSON.parse(localStorage.getItem("users") || "[]"),
+    []
+  );
+
+  const currentUser = useMemo(() => {
+    return allUsers.find((u) => u.email === storedUser.email) || storedUser || {};
+  }, [allUsers, storedUser]);
 
   const userKey = currentUser?.email || "guest_user";
 
-  // ✅ Load user profile from localStorage or fallback to registered info
+  /** ---------------- Profile State ---------------- */
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem(`${userKey}_profile`);
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem(`${userKey}_profile`);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore parse errors
+    }
     return {
       name: currentUser?.name || "User",
       email: currentUser?.email || "Not Available",
@@ -26,44 +40,59 @@ const UserProfile = () => {
     };
   });
 
-  // ✅ Load and manage user skills
+  /** ---------------- Skills ---------------- */
   const [skills, setSkills] = useState(() => {
-    const saved = localStorage.getItem(`${userKey}_skills`);
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem(`${userKey}_skills`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [newSkill, setNewSkill] = useState("");
   const [showSkillModal, setShowSkillModal] = useState(false);
 
-  // ✅ Keep profile updated in localStorage
+  /** ---------------- Persist Profile & Skills ---------------- */
   useEffect(() => {
-    localStorage.setItem(`${userKey}_profile`, JSON.stringify(user));
+    try {
+      localStorage.setItem(`${userKey}_profile`, JSON.stringify(user));
+    } catch {}
   }, [user, userKey]);
 
-  // ✅ Keep skills synced
   useEffect(() => {
-    localStorage.setItem(`${userKey}_skills`, JSON.stringify(skills));
+    try {
+      localStorage.setItem(`${userKey}_skills`, JSON.stringify(skills));
+    } catch {}
   }, [skills, userKey]);
 
-  // ✅ Add new skill
-  const handleAddSkill = (e) => {
-    e.preventDefault();
-    if (newSkill.trim()) {
-      setSkills((prev) => [...prev, newSkill.trim()]);
+  /** ---------------- Handlers ---------------- */
+  const handleAddSkill = useCallback(
+    (e) => {
+      e.preventDefault();
+      const skill = newSkill.trim();
+      if (!skill) return;
+      if (!skills.includes(skill)) {
+        setSkills((prev) => [...prev, skill]);
+      }
       setNewSkill("");
       setShowSkillModal(false);
-    }
-  };
+    },
+    [newSkill, skills]
+  );
 
-  // ✅ Logout: clear all related keys
-  const handleLogout = () => {
-    logout(); // from AuthContext (clears nitc_user)
-    localStorage.removeItem("current_user");
-    localStorage.removeItem(`${userKey}_profile`);
-    localStorage.removeItem(`${userKey}_skills`);
+  const handleLogout = useCallback(() => {
+    logout();
+    const keysToRemove = [
+      "current_user",
+      `${userKey}_profile`,
+      `${userKey}_skills`,
+    ];
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
     navigate("/");
-  };
+  }, [logout, navigate, userKey]);
 
+  /** ---------------- Render ---------------- */
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
       {/* Navbar */}
@@ -72,56 +101,79 @@ const UserProfile = () => {
           <span className="navbar-brand fw-semibold">
             NITC Job Portal – {user.name}
           </span>
-          <ul className="navbar-nav ms-auto">
-            <li className="nav-item">
-              <Link className="nav-link" to="/dashboard-user">
-                Dashboard
-              </Link>
-            </li>
-            <li className="nav-item">
-              <Link className="nav-link active" to="/profile-user">
-                Profile
-              </Link>
-            </li>
-            <li className="nav-item">
-              <button
-                className="btn btn-link nav-link text-danger"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </li>
-          </ul>
+          <button
+            className="navbar-toggler"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#navbarNav"
+            aria-controls="navbarNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span className="navbar-toggler-icon"></span>
+          </button>
+          <div className="collapse navbar-collapse" id="navbarNav">
+            <ul className="navbar-nav ms-auto">
+              <li className="nav-item">
+                <Link className="nav-link" to="/dashboard-user">
+                  Dashboard
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link className="nav-link active" to="/profile-user">
+                  Profile
+                </Link>
+              </li>
+              <li className="nav-item">
+                <button
+                  className="btn btn-link nav-link text-danger"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
       </nav>
 
       {/* Profile Card */}
       <div className="container py-5 flex-grow-1">
         <div
-          className="card shadow-sm border-0 p-4 mx-auto"
-          style={{ maxWidth: "600px" }}
+          className="card shadow-lg border-0 p-4 mx-auto"
+          style={{ maxWidth: "600px", borderRadius: "16px" }}
         >
-          <h4 className="fw-bold text-primary mb-3">User Profile</h4>
-          <p>
-            <strong>Full Name:</strong> {user.name}
-          </p>
-          <p>
-            <strong>Email:</strong> {user.email}
-          </p>
-          
+          <h4 className="fw-bold text-primary mb-4">User Profile</h4>
+          <div className="mb-3">
+            <p className="mb-1">
+              <strong>Full Name:</strong> {user.name}
+            </p>
+            <p className="mb-1">
+              <strong>Email:</strong> {user.email}
+            </p>
+            <p className="mb-1">
+              <strong>Department:</strong> {user.department}
+            </p>
+          </div>
 
-          <div className="mt-4">
-            <h5>Skills:</h5>
-            <ul>
-              {skills.length > 0 ? (
-                skills.map((skill, index) => <li key={index}>{skill}</li>)
-              ) : (
-                <p className="text-muted">No skills added yet.</p>
-              )}
-            </ul>
+          <hr />
+
+          <div className="mt-3">
+            <h5 className="fw-semibold mb-2">Skills</h5>
+            {skills.length > 0 ? (
+              <ul className="list-group list-group-flush mb-3">
+                {skills.map((skill, index) => (
+                  <li key={index} className="list-group-item">
+                    {skill}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted">No skills added yet.</p>
+            )}
             <Button
               variant="success"
-              className="mt-2"
+              className="mt-2 fw-semibold"
               onClick={() => setShowSkillModal(true)}
             >
               Add Skills
@@ -131,7 +183,11 @@ const UserProfile = () => {
       </div>
 
       {/* Add Skill Modal */}
-      <Modal show={showSkillModal} onHide={() => setShowSkillModal(false)} centered>
+      <Modal
+        show={showSkillModal}
+        onHide={() => setShowSkillModal(false)}
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>Add New Skill</Modal.Title>
         </Modal.Header>
@@ -143,6 +199,7 @@ const UserProfile = () => {
               value={newSkill}
               onChange={(e) => setNewSkill(e.target.value)}
               required
+              autoFocus
             />
           </Modal.Body>
           <Modal.Footer>
@@ -161,10 +218,10 @@ const UserProfile = () => {
 
       {/* Footer */}
       <footer className="bg-primary text-white text-center py-3 mt-auto">
-        <small>© 2025 NITC Job Portal User. All rights reserved.</small>
+        <small>© {new Date().getFullYear()} NITC Job Portal User. All rights reserved.</small>
       </footer>
     </div>
   );
-};
+});
 
 export default UserProfile;

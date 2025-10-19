@@ -1,84 +1,133 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Modal, Button, Spinner, Badge } from "react-bootstrap";
 import axios from "axios";
 
-const AdminApplications = () => {
+const AdminApplications = React.memo(function AdminApplications() {
   const navigate = useNavigate();
+
+  const adminUser = useMemo(
+    () => JSON.parse(localStorage.getItem("admin_user") || "{}"),
+    []
+  );
+  const adminToken = useMemo(
+    () => JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token,
+    []
+  );
+  const apiBase = useMemo(
+    () => process.env.REACT_APP_API_URL || "http://localhost:5000",
+    []
+  );
 
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const adminUser = JSON.parse(localStorage.getItem("admin_user") || "{}");
-  const adminToken = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
- useEffect(() => {
-  const fetchApplications = async () => {
+  const mountedRef = useRef(true);
+
+  /** ===========================
+   *  Configure axios globally
+   *  =========================== */
+  useEffect(() => {
+    axios.defaults.baseURL = apiBase;
+    if (adminToken)
+      axios.defaults.headers.common["Authorization"] = `Bearer ${adminToken}`;
+  }, [adminToken, apiBase]);
+
+  /** ===========================
+   *  Fetch applications
+   *  =========================== */
+  const fetchApplications = useCallback(async () => {
+    if (!adminUser?.email) return;
+    setLoading(true);
+    setErrorMsg("");
+
     try {
-      if (adminToken)
-        axios.defaults.headers.common["Authorization"] = `Bearer ${adminToken}`;
-
-      console.log("📨 Fetching applications for admin:", adminUser.email);
-
-      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/admin/${adminUser.email}`);
+      const res = await axios.get(
+        `/api/applications/admin/${adminUser.email}`
+      );
+      if (!mountedRef.current) return;
       setApplications(res.data || []);
     } catch (err) {
       console.error("Error fetching applications:", err);
-      alert("⚠️ Failed to load applications. Check backend connection.");
+      setErrorMsg(
+        err.response?.data?.message ||
+          "⚠️ Failed to load applications. Please check your backend connection."
+      );
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [adminUser.email]);
 
-  fetchApplications();
-}, [adminToken]);
+  useEffect(() => {
+    mountedRef.current = true;
+    fetchApplications();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [fetchApplications]);
 
-// ✅ Update application status
- // ✅ Update application status (Accept / Reject)
-const updateStatus = async (id, status) => {
-  try {
-    const adminToken = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
+  /** ===========================
+   *  Update application status
+   *  =========================== */
+  const updateStatus = useCallback(
+    async (id, status) => {
+      try {
+        if (!adminToken) {
+          alert("⚠️ Admin not logged in. Please re-login.");
+          return;
+        }
 
-    if (!adminToken) {
-      alert("⚠️ Admin not logged in. Please re-login.");
-      return;
-    }
+        const res = await axios.put(`/api/applications/${id}/status`, {
+          status,
+        });
 
-    // ✅ Always attach Authorization header before request
-    axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-    axios.defaults.headers.common["Authorization"] = `Bearer ${adminToken}`;
+       
+        console.log("✅ Status updated:", res.data);
 
-    const res = await axios.put(`${process.env.REACT_APP_API_URL}/api/applications/${id}/status`, { status });
+        // Update local state instead of refetching whole list
+        setApplications((prev) =>
+          prev.map((app) =>
+            app._id === id ? { ...app, status: status } : app
+          )
+        );
 
-    alert(`✅ Application marked as ${status}`);
-    console.log("✅ Status updated:", res.data);
+        // If modal is open and same app updated, reflect immediately
+        if (selectedApp && selectedApp._id === id) {
+          setSelectedApp((prev) => ({ ...prev, status }));
+        }
+      } catch (err) {
+        console.error("❌ Status update failed:", err);
+        alert(
+          err.response?.data?.message ||
+            "❌ Failed to update application status. Please try again."
+        );
+      }
+    },
+    [adminToken, selectedApp]
+  );
 
-    // Refresh list after update
-    const refreshed = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/admin/${adminUser.email}`);
-    setApplications(refreshed.data || []);
-  } catch (err) {
-    console.error("❌ Status update failed:", err);
-    alert(
-      err.response?.data?.message ||
-        "❌ Failed to update application status. Please check backend connection."
-    );
-  }
-};
-
-
-
-  // ✅ Modal control
-  const openModal = (app) => {
+  /** ===========================
+   *  Modal control
+   *  =========================== */
+  const openModal = useCallback((app) => {
     setSelectedApp(app);
     setShowModal(true);
-  };
+  }, []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("admin_user");
     localStorage.removeItem("nitc_user");
     navigate("/");
-  };
+  }, [navigate]);
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -88,7 +137,9 @@ const updateStatus = async (id, status) => {
         style={{ background: "#0B3D6E" }}
       >
         <div className="container-fluid">
-          <span className="navbar-brand fw-semibold">NITC Job Portal – Admin</span>
+          <span className="navbar-brand fw-semibold">
+            NITC Job Portal – Admin
+          </span>
           <ul className="navbar-nav ms-auto">
             <li className="nav-item">
               <Link className="nav-link" to="/admin">
@@ -114,9 +165,15 @@ const updateStatus = async (id, status) => {
 
       {/* ===== Main Body ===== */}
       <div className="container py-4 flex-grow-1">
+        {errorMsg && (
+          <div className="alert alert-danger text-center">{errorMsg}</div>
+        )}
+
         <div className="card shadow-sm border-0">
           <div className="card-header bg-white d-flex justify-content-between align-items-center">
-            <h5 className="mb-0 fw-bold text-primary">Applications Overview</h5>
+            <h5 className="mb-0 fw-bold text-primary">
+              Applications Overview
+            </h5>
             <span className="badge bg-secondary">{applications.length} Total</span>
           </div>
 
@@ -145,11 +202,17 @@ const updateStatus = async (id, status) => {
                     {applications.map((a) => (
                       <tr key={a._id}>
                         <td>
-                          <strong>{a.applicant?.name}</strong>
-                          <div className="text-muted small">{a.applicant?.email}</div>
+                          <strong>{a.applicant?.name || "Unknown"}</strong>
+                          <div className="text-muted small">
+                            {a.applicant?.email || "N/A"}
+                          </div>
                         </td>
-                        <td>{a.job?.title}</td>
-                        <td>{new Date(a.appliedOn).toLocaleDateString()}</td>
+                        <td>{a.job?.title || "N/A"}</td>
+                        <td>
+                          {a.appliedOn
+                            ? new Date(a.appliedOn).toLocaleDateString()
+                            : "N/A"}
+                        </td>
                         <td>
                           <Badge
                             bg={
@@ -178,7 +241,7 @@ const updateStatus = async (id, status) => {
                             <span className="text-muted small">No resume</span>
                           )}
                         </td>
-                        <td className="d-flex gap-2">
+                        <td className="d-flex gap-2 flex-wrap">
                           <Button
                             variant="outline-primary"
                             size="sm"
@@ -295,10 +358,13 @@ const updateStatus = async (id, status) => {
 
       {/* ===== Footer ===== */}
       <footer className="text-center py-3 mt-auto bg-dark text-white">
-        <small>© {new Date().getFullYear()} NITC Job Portal Admin.</small>
+        <small>
+          © {new Date().getFullYear()} NITC Job Portal Admin. All rights
+          reserved.
+        </small>
       </footer>
     </div>
   );
-};
+});
 
 export default AdminApplications;

@@ -1,94 +1,154 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import { Modal, Button, Form } from "react-bootstrap";
 import NotificationBell from "../components/NotificationBell";
 import axios from "axios";
 
-const UserDashboard = () => {
+/** ---------- stable helpers ---------- */
+const getEnvApi = () => process.env.REACT_APP_API_URL || "http://localhost:5000";
+const getToken = () => JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token || null;
+
+/** create a local axios client (doesn't mutate global defaults) */
+const useAxiosClient = () => {
+  const token = useMemo(getToken, []);
+  return useMemo(() => {
+    const client = axios.create({
+      baseURL: getEnvApi(),
+      timeout: 15000,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    return client;
+  }, [token]);
+};
+
+const UserDashboard = React.memo(function UserDashboard() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  // Job View Modal
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [viewJob, setViewJob] = useState(null);
-  const handleViewJob = (job) => {
-    setViewJob(job);
-    setShowViewModal(true);
-  };
+  const api = useAxiosClient();
 
-  // ---------------- CURRENT USER ----------------
-  const storedUser = JSON.parse(localStorage.getItem("current_user") || "{}");
-  const allUsers = JSON.parse(localStorage.getItem("users") || "[]");
-
-  const currentUser =
-    allUsers.find((u) => u.email === storedUser.email) || storedUser;
+  /** ---------- user bootstrap (memoized) ---------- */
+  const storedUser = useMemo(
+    () => JSON.parse(localStorage.getItem("current_user") || "{}"),
+    []
+  );
+  const allUsers = useMemo(
+    () => JSON.parse(localStorage.getItem("users") || "[]"),
+    []
+  );
+  const currentUser = useMemo(() => {
+    const found = allUsers.find((u) => u.email === storedUser.email);
+    return found || storedUser || {};
+  }, [allUsers, storedUser]);
 
   const userKey = currentUser?.email || "guest_user";
   const userName = currentUser?.name || "User";
 
-  // ---------------- NOTIFICATIONS ----------------
+  /** ---------- ui state ---------- */
+  const [loading, setLoading] = useState(false);
+
+  // job view modal
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewJob, setViewJob] = useState(null);
+  const handleViewJob = useCallback((job) => {
+    setViewJob(job);
+    setShowViewModal(true);
+  }, []);
+
+  /** ---------- notifications ---------- */
   const [notifications, setNotifications] = useState([]);
-
   useEffect(() => {
-    const fetchNotifications = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-        const token = JSON.parse(
-          localStorage.getItem("nitc_user") || "{}"
-        )?.token;
-        if (token)
-          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-        if (currentUser?.email) {
-          const res = await axios.get(
-            `${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`
-          );
-          setNotifications(res.data || []);
-        }
-      } catch (err) {
-        console.error("Failed to load notifications:", err);
+        if (!currentUser?.email) return;
+        const { data } = await api.get(`/api/notifications/${currentUser.email}`);
+        if (!cancelled) setNotifications(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error("Failed to load notifications:", e);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
+  }, [api, currentUser?.email]);
 
-    fetchNotifications();
-  }, [currentUser?.email]);
-
-  // Clear notifications in backend
-  const clearNotifications = async () => {
+  const clearNotifications = useCallback(async () => {
     try {
-      axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-      const token = JSON.parse(
-        localStorage.getItem("nitc_user") || "{}"
-      )?.token;
-      if (token)
-        axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-      await axios.delete(
-        `${process.env.REACT_APP_API_URL}/api/notifications/${currentUser.email}`
-      );
+      if (!currentUser?.email) return;
+      await api.delete(`/api/notifications/${currentUser.email}`);
       setNotifications([]);
-    } catch (err) {
-      console.error(" Failed to clear notifications:", err);
+    } catch (e) {
+      console.error("Failed to clear notifications:", e);
     }
-  };
+  }, [api, currentUser?.email]);
 
-  // Fetch updated applications from backend
+  /** ---------- jobs ---------- */
+  const [jobs, setJobs] = useState(() => {
+    // tiny warm cache to reduce flash
+    try {
+      const cached = localStorage.getItem("jobs");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/api/jobs`);
+        const backendJobs = Array.isArray(data) ? data : [];
+        const formatted = backendJobs.map((job) => ({
+          id: job._id,
+          title: job.title,
+          department: job.department,
+          deadline: job.deadline?.split("T")[0] || "N/A",
+          qualifications: job.qualifications,
+          description: job.description,
+          requiredSkills: job.requiredSkills || [],
+          owner: job.owner || "unknown",
+          applicantCount: job.applicantCount || 0,
+        }));
+        if (!cancelled) {
+          setJobs(formatted);
+          localStorage.setItem("jobs", JSON.stringify(formatted));
+        }
+      } catch (e) {
+        console.error("Failed to load jobs:", e);
+        alert(" Failed to load job listings. Please try again.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  /** ---------- applications ---------- */
+  const [applications, setApplications] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`${userKey}_applications`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // write-through cache only when apps actually change
+  useEffect(() => {
+    localStorage.setItem(`${userKey}_applications`, JSON.stringify(applications));
+  }, [applications, userKey]);
+
+  // fetch from backend + optional polling
+  useEffect(() => {
+    let cancelled = false;
+    let timerId = null;
+
     const fetchApplications = async () => {
       try {
-        axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-        const token = JSON.parse(
-          localStorage.getItem("nitc_user") || "{}"
-        )?.token;
-        if (token)
-          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-        const res = await axios.get(
-          `${process.env.REACT_APP_API_URL}/api/applications/user`
-        );
-        const backendApps = res.data || [];
-
-        // Format apps to match local UI fields
+        const { data } = await api.get(`/api/applications/user`);
+        const backendApps = Array.isArray(data) ? data : [];
         const formattedApps = backendApps.map((app) => ({
           id: app._id,
           jobId: app.jobId?._id || app.jobId,
@@ -99,29 +159,38 @@ const UserDashboard = () => {
           resumeUrl: app.resumeUrl || "",
           resumeStatus: app.resumeUrl ? "Uploaded" : " Not Uploaded",
         }));
-
-        setApplications(formattedApps);
-        localStorage.setItem(
-          `${userKey}_applications`,
-          JSON.stringify(formattedApps)
-        );
-      } catch (err) {
-        console.error(" Failed to load user applications:", err);
+        if (!cancelled) {
+          // avoid state updates if equal (cheap compare length + id set)
+          const prev = applications;
+          const sameLength = prev.length === formattedApps.length;
+          const sameIds =
+            sameLength &&
+            prev.every((p, i) => p.id === formattedApps[i]?.id && p.status === formattedApps[i]?.status);
+          if (!sameIds) setApplications(formattedApps);
+        }
+      } catch (e) {
+        console.error("Failed to load user applications:", e);
       }
     };
 
+    // initial fetch
     fetchApplications();
+    // optional polling (30s)
+    timerId = window.setInterval(fetchApplications, 30000);
 
-    //  Optional auto-refresh every 30s
-    const interval = setInterval(fetchApplications, 30000);
-    return () => clearInterval(interval);
-  }, [userKey]);
+    return () => {
+      cancelled = true;
+      if (timerId) window.clearInterval(timerId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, userKey]); // do not depend on `applications` to avoid feedback loop
 
-  // ---------------- USER PROFILE ----------------
+  /** ---------- profile (lazy init) ---------- */
+  // kept for feature parity even if not used in render
+  // eslint-disable-next-line no-unused-vars
   const [profile] = useState(() => {
     const saved = localStorage.getItem(`${userKey}_profile`);
     if (saved) return JSON.parse(saved);
-
     return {
       name: currentUser?.name || "User",
       email: currentUser?.email || "Not Available",
@@ -129,106 +198,53 @@ const UserDashboard = () => {
     };
   });
 
-  // ---------------- JOB DATA ----------------
-  const [jobs, setJobs] = useState([]);
-
-  useEffect(() => {
-    const fetchJobs = async () => {
-      try {
-        // Set base URL (backend)
-        axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
-
-        //  Optional: Add token if user logged in
-        const token = JSON.parse(
-          localStorage.getItem("nitc_user") || "{}"
-        )?.token;
-        if (token)
-          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-        const res = await axios.get(
-          `${process.env.REACT_APP_API_URL}/api/jobs`
-        );
-        const backendJobs = res.data || [];
-
-        //  Normalize job fields for frontend consistency
-        const formatted = backendJobs.map((job) => ({
-          id: job._id, // your local code uses "id"
-          title: job.title,
-          department: job.department,
-          deadline: job.deadline?.split("T")[0] || "N/A",
-          qualifications: job.qualifications,
-          description: job.description,
-          requiredSkills: job.requiredSkills || [],
-          owner: job.owner || "unknown",
-          applicantCount: job.applicantCount || 0,
-        }));
-
-        setJobs(formatted);
-        localStorage.setItem("jobs", JSON.stringify(formatted)); // optional caching
-      } catch (err) {
-        console.error(" Failed to load jobs:", err);
-        alert(" Failed to load job listings. Please try again.");
-      }
-    };
-
-    fetchJobs();
-  }, []);
-
-  // ---------------- FILTERS ----------------
+  /** ---------- filters ---------- */
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDept, setSelectedDept] = useState("All");
 
+  // reduce re-computation pressure on big lists
+  const deferredSearch = useDeferredValue(searchTerm);
+
   const filteredJobs = useMemo(() => {
+    const s = deferredSearch.trim().toLowerCase();
+    const dept = selectedDept;
+    if (!jobs.length) return [];
     return jobs.filter((job) => {
-      const matchesSearch =
-        job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.department.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesDept =
-        selectedDept === "All" || job.department === selectedDept;
+      const title = job.title?.toLowerCase() || "";
+      const department = job.department?.toLowerCase() || "";
+      const matchesSearch = !s || title.includes(s) || department.includes(s);
+      const matchesDept = dept === "All" || job.department === dept;
       return matchesSearch && matchesDept;
     });
-  }, [searchTerm, selectedDept, jobs]);
+  }, [deferredSearch, selectedDept, jobs]);
 
-  // ---------------- APPLICATION HISTORY ----------------
-  const [applications, setApplications] = useState(() => {
-    const saved = localStorage.getItem(`${userKey}_applications`);
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem(
-      `${userKey}_applications`,
-      JSON.stringify(applications)
-    );
-  }, [applications, userKey]);
-
-  // ---------------- USER SKILLS ----------------
+  /** ---------- skills & recommendations ---------- */
   const userSkills = useMemo(() => {
-    const stored = localStorage.getItem(`${userKey}_skills`);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(`${userKey}_skills`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
   }, [userKey]);
 
-  // ---------------- RECOMMENDED JOBS ----------------
   const recommendedJobs = useMemo(() => {
-    if (!userSkills || userSkills.length === 0) return [];
-
+    if (!userSkills?.length || !jobs.length) return [];
+    const lowerSkills = userSkills.map((u) => u.toLowerCase());
+    const appSet = new Set(applications.map((a) => a.jobId));
     return jobs
       .map((job) => {
         const reqSkills = job.requiredSkills || [];
-        const alreadyApplied = applications.some((a) => a.jobId === job.id);
-
+        const alreadyApplied = appSet.has(job.id);
         const skillMatches = reqSkills.filter((s) =>
-          userSkills.some((u) => u.toLowerCase() === s.toLowerCase())
+          lowerSkills.includes(String(s).toLowerCase())
         ).length;
-
-        const fallbackMatches = userSkills.filter(
+        const fallbackMatches = lowerSkills.filter(
           (u) =>
-            job.title.toLowerCase().includes(u.toLowerCase()) ||
-            job.department.toLowerCase().includes(u.toLowerCase())
+            job.title.toLowerCase().includes(u) ||
+            job.department.toLowerCase().includes(u)
         ).length;
-
         const totalScore = skillMatches * 10 + fallbackMatches;
-
         return { job, score: totalScore, alreadyApplied };
       })
       .filter((j) => !j.alreadyApplied && j.score > 0)
@@ -236,7 +252,7 @@ const UserDashboard = () => {
       .map((j) => j.job);
   }, [jobs, userSkills, applications]);
 
-  // ---------------- APPLY FORM ----------------
+  /** ---------- apply flow ---------- */
   const [showModal, setShowModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [formData, setFormData] = useState({
@@ -246,109 +262,108 @@ const UserDashboard = () => {
     coverLetter: "",
   });
 
-  const handleApply = (job) => {
-    const alreadyApplied = applications.some((app) => app.jobId === job.id);
-    if (alreadyApplied) {
-      alert("You have already applied for this job.");
-      return;
-    }
-    setSelectedJob(job);
-    setShowModal(true);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (loading) return; //  Prevent multiple submissions
-
-    try {
-      setLoading(true); //  Start loader
-
-      if (!selectedJob) {
-        alert(" No job selected.");
-        setLoading(false);
+  const openApply = useCallback(
+    (job) => {
+      const alreadyApplied = applications.some((app) => app.jobId === job.id);
+      if (alreadyApplied) {
+        alert("You have already applied for this job.");
         return;
       }
+      setSelectedJob(job);
+      setShowModal(true);
+    },
+    [applications]
+  );
 
-      const token = JSON.parse(
-        localStorage.getItem("nitc_user") || "{}"
-      )?.token;
-      if (!token) {
-        alert("Please log in to apply for a job.");
-        setLoading(false);
-        return;
-      }
+  const fileReaderRef = useRef(null);
 
-      axios.defaults.baseURL =
-        process.env.REACT_APP_API_URL || "http://localhost:5000";
-      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-      // ✅ Prepare backend payload
-      const payload = {
-        jobId: selectedJob.id,
-        coverLetter: formData.coverLetter,
-        resumeUrl: formData.resumeFile,
-      };
-
-      const res = await axios.post(
-        `${process.env.REACT_APP_API_URL}/api/applications/apply`,
-        payload
-      );
-      console.log("✅ Application submitted:", res.data);
-
-      alert(`✅ Application submitted successfully for: ${selectedJob.title}`);
-
-      const newApplication = {
-        id: res.data.application._id,
-        jobId: selectedJob.id,
-        title: selectedJob.title,
-        department: selectedJob.department,
-        applicant: currentUser.email,
-        applicantName: currentUser.name,
-        coverLetter: formData.coverLetter,
-        resumeUrl: formData.resumeFile,
-        status: "Pending",
-        appliedOn: new Date().toLocaleDateString(),
-      };
-
-      const nextApps = [...applications, newApplication];
-      setApplications(nextApps);
-      localStorage.setItem(`${userKey}_applications`, JSON.stringify(nextApps));
-
-      //  Reset form + close modal
-      setFormData({ name: "", email: "", resumeFile: null, coverLetter: "" });
-      setShowModal(false);
-    } catch (err) {
-      console.error(" Application submit failed:", err);
-      alert(" Failed to submit application. Please try again.");
-    } finally {
-      setLoading(false); // Always stop loader
-    }
-  };
-
-  // Handle input change
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value, files } = e.target;
-
     if (name === "resume" && files && files[0]) {
       const file = files[0];
       const reader = new FileReader();
-
+      fileReaderRef.current = reader;
       reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, resumeFile: reader.result })); // Base64 data URL
+        setFormData((prev) => ({ ...prev, resumeFile: reader.result })); // Base64 (as before)
       };
-
-      reader.readAsDataURL(file); // Converts file to Base64
+      reader.readAsDataURL(file);
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
-  };
+  }, []);
 
-  // ---------------- LOGOUT ----------------
-  const handleLogout = () => {
+  useEffect(() => {
+    // abort any pending FileReader work if modal closes/unmounts
+    return () => {
+      const r = fileReaderRef.current;
+      if (r && r.readyState === 1 /* LOADING */) {
+        try {
+          r.abort();
+        } catch {}
+      }
+    };
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      if (loading) return;
+      if (!selectedJob) {
+        alert(" No job selected.");
+        return;
+      }
+      const token = getToken();
+      if (!token) {
+        alert("Please log in to apply for a job.");
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const payload = {
+          jobId: selectedJob.id,
+          coverLetter: formData.coverLetter,
+          resumeUrl: formData.resumeFile,
+        };
+        const { data } = await api.post(`/api/applications/apply`, payload);
+        alert(`✅ Application submitted successfully for: ${selectedJob.title}`);
+
+        const newApplication = {
+          id: data?.application?._id,
+          jobId: selectedJob.id,
+          title: selectedJob.title,
+          department: selectedJob.department,
+          applicant: currentUser.email,
+          applicantName: currentUser.name,
+          coverLetter: formData.coverLetter,
+          resumeUrl: formData.resumeFile,
+          status: "Pending",
+          appliedOn: new Date().toLocaleDateString(),
+        };
+
+        setApplications((prev) => {
+          const next = [...prev, newApplication];
+          localStorage.setItem(`${userKey}_applications`, JSON.stringify(next));
+          return next;
+        });
+
+        setFormData({ name: "", email: "", resumeFile: null, coverLetter: "" });
+        setShowModal(false);
+      } catch (err) {
+        console.error("Application submit failed:", err);
+        alert(" Failed to submit application. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, currentUser.email, currentUser.name, formData.coverLetter, formData.resumeFile, loading, selectedJob, userKey]
+  );
+
+  /** ---------- logout ---------- */
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("current_user");
     navigate("/");
-  };
+  }, [navigate]);
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -356,8 +371,6 @@ const UserDashboard = () => {
       <nav className="navbar navbar-expand-lg navbar-dark bg-primary px-4">
         <div className="container-fluid">
           <span className="navbar-brand fw-semibold">NITC Job Portal</span>
-
-          {/*  Add Toggler for mobile */}
           <button
             className="navbar-toggler"
             type="button"
@@ -370,7 +383,6 @@ const UserDashboard = () => {
             <span className="navbar-toggler-icon"></span>
           </button>
 
-          {/* Wrap nav links inside collapse container */}
           <div className="collapse navbar-collapse" id="navbarSupportedContent">
             <ul className="navbar-nav ms-auto align-items-center">
               <li className="nav-item">
@@ -384,16 +396,10 @@ const UserDashboard = () => {
                 </Link>
               </li>
               <li className="nav-item d-flex align-items-center">
-                <NotificationBell
-                  notifications={notifications}
-                  onClear={clearNotifications}
-                />
+                <NotificationBell notifications={notifications} onClear={clearNotifications} />
               </li>
               <li className="nav-item">
-                <button
-                  className="btn btn-link nav-link text-danger"
-                  onClick={handleLogout}
-                >
+                <button className="btn btn-link nav-link text-danger" onClick={handleLogout}>
                   Logout
                 </button>
               </li>
@@ -409,9 +415,7 @@ const UserDashboard = () => {
           <div className="col-md-3 mb-4">
             <div className="card shadow-sm border-0 mb-3 p-3">
               <h5 className="text-primary">Welcome, {userName}</h5>
-              <p className="text-muted small">
-                Browse jobs and apply online easily.
-              </p>
+              <p className="text-muted small">Browse jobs and apply online easily.</p>
             </div>
             <div className="card text-center shadow-sm border-0 mb-3 p-3">
               <h6>Applications Made</h6>
@@ -436,33 +440,22 @@ const UserDashboard = () => {
             {/* Recommended Jobs */}
             {userSkills.length > 0 && recommendedJobs.length > 0 && (
               <div className="card shadow-sm border-0 mb-4">
-                <div className="card-header bg-light fw-semibold fs-5">
-                  Recommended Jobs for You
-                </div>
+                <div className="card-header bg-light fw-semibold fs-5">Recommended Jobs for You</div>
                 <div className="card-body">
                   <div className="text-muted small mb-2">
-                     Recommendations improve when admins specify{" "}
-                    <em>Required Skills</em>.
+                    Recommendations improve when admins specify <em>Required Skills</em>.
                   </div>
                   <div className="row">
                     {recommendedJobs.map((job) => (
                       <div className="col-md-6 mb-3" key={job.id}>
                         <div className="card h-100 border shadow-sm">
                           <div className="card-body">
-                            <h6 className="fw-bold text-primary">
-                              {job.title}
-                            </h6>
-                            <p className="text-muted small mb-1">
-                              {job.department}
-                            </p>
+                            <h6 className="fw-bold text-primary">{job.title}</h6>
+                            <p className="text-muted small mb-1">{job.department}</p>
                             <p className="mb-2">
                               <strong>Deadline:</strong> {job.deadline}
                             </p>
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              onClick={() => handleApply(job)}
-                            >
+                            <Button variant="outline-primary" size="sm" onClick={() => openApply(job)}>
                               Apply Now
                             </Button>
                           </div>
@@ -521,34 +514,22 @@ const UserDashboard = () => {
                       </tr>
                     ) : (
                       filteredJobs.map((job) => {
-                        const applied = applications.some(
-                          (app) => app.jobId === job.id
-                        );
+                        const applied = applications.some((app) => app.jobId === job.id);
                         return (
                           <tr key={job.id}>
                             <td>{job.title}</td>
                             <td>{job.deadline}</td>
                             <td>{job.department}</td>
                             <td className="d-flex flex-wrap gap-2">
-                              <button
-                                className="btn btn-info btn-sm"
-                                onClick={() => handleViewJob(job)}
-                              >
+                              <button className="btn btn-info btn-sm" onClick={() => handleViewJob(job)}>
                                 View
                               </button>
-
                               {applied ? (
-                                <button
-                                  className="btn btn-success btn-sm"
-                                  disabled
-                                >
+                                <button className="btn btn-success btn-sm" disabled>
                                   Applied
                                 </button>
                               ) : (
-                                <button
-                                  className="btn btn-outline-primary btn-sm"
-                                  onClick={() => handleApply(job)}
-                                >
+                                <button className="btn btn-outline-primary btn-sm" onClick={() => openApply(job)}>
                                   Apply
                                 </button>
                               )}
@@ -564,14 +545,10 @@ const UserDashboard = () => {
 
             {/* Application History */}
             <div className="card shadow-sm border-0">
-              <div className="card-header bg-light fw-semibold fs-5">
-                Application History
-              </div>
+              <div className="card-header bg-light fw-semibold fs-5">Application History</div>
               <div className="card-body">
                 {applications.length === 0 ? (
-                  <p className="text-muted text-center mb-0">
-                    No applications submitted yet.
-                  </p>
+                  <p className="text-muted text-center mb-0">No applications submitted yet.</p>
                 ) : (
                   <div className="table-responsive">
                     <table className="table table-hover align-middle">
@@ -585,8 +562,8 @@ const UserDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {applications.map((app, idx) => (
-                          <tr key={idx}>
+                        {applications.map((app) => (
+                          <tr key={app.id || app.jobId}>
                             <td>{app.title}</td>
                             <td>{app.department}</td>
                             <td>{app.appliedOn}</td>
@@ -605,11 +582,7 @@ const UserDashboard = () => {
                             </td>
                             <td>
                               {app.resumeUrl ? (
-                                <a
-                                  href={app.resumeUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
+                                <a href={app.resumeUrl} target="_blank" rel="noopener noreferrer">
                                   📄 View Resume
                                 </a>
                               ) : (
@@ -627,12 +600,9 @@ const UserDashboard = () => {
           </div>
         </div>
       </div>
+
       {/* View Job Details Modal */}
-      <Modal
-        show={showViewModal}
-        onHide={() => setShowViewModal(false)}
-        centered
-      >
+      <Modal show={showViewModal} onHide={() => setShowViewModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Job Details</Modal.Title>
         </Modal.Header>
@@ -684,32 +654,15 @@ const UserDashboard = () => {
           <Modal.Body>
             <Form.Group className="mb-3">
               <Form.Label>Full Name</Form.Label>
-              <Form.Control
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-              />
+              <Form.Control type="text" name="name" value={formData.name} onChange={handleChange} required />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Email</Form.Label>
-              <Form.Control
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
+              <Form.Control type="email" name="email" value={formData.email} onChange={handleChange} required />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Upload Resume</Form.Label>
-              <Form.Control
-                type="file"
-                name="resume"
-                accept=".pdf,.doc,.docx"
-                onChange={handleChange}
-              />
+              <Form.Control type="file" name="resume" accept=".pdf,.doc,.docx" onChange={handleChange} />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Cover Letter</Form.Label>
@@ -730,10 +683,7 @@ const UserDashboard = () => {
             <Button type="submit" variant="primary" disabled={loading}>
               {loading ? (
                 <>
-                  <span
-                    className="spinner-border spinner-border-sm me-2"
-                    role="status"
-                  />
+                  <span className="spinner-border spinner-border-sm me-2" role="status" />
                   Submitting...
                 </>
               ) : (
@@ -750,6 +700,6 @@ const UserDashboard = () => {
       </footer>
     </div>
   );
-};
+});
 
 export default UserDashboard;

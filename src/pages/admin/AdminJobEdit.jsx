@@ -1,10 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const AdminJobEdit = () => {
+const AdminJobEdit = React.memo(function AdminJobEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const apiBase = useMemo(
+    () => process.env.REACT_APP_API_URL || "http://localhost:5000",
+    []
+  );
 
   const [form, setForm] = useState({
     title: "",
@@ -16,62 +21,101 @@ const AdminJobEdit = () => {
   });
 
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+  const mountedRef = useRef(true);
 
-  // ✅ Fetch job details from backend
+  /** ===========================
+   *  Fetch job details
+   *  =========================== */
   useEffect(() => {
+    mountedRef.current = true;
     const fetchJob = async () => {
       try {
+        setLoading(true);
+        setErrorMsg("");
+
         const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-        if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        if (token)
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        axios.defaults.baseURL = apiBase;
 
-        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`);
-        const job = res.data;
+        const res = await axios.get(`/api/jobs/${id}`);
+        if (!mountedRef.current) return;
 
+        const job = res.data || {};
         setForm({
-          title: job.title,
-          department: job.department,
+          title: job.title || "",
+          department: job.department || "",
           deadline: job.deadline ? job.deadline.split("T")[0] : "",
-          qualifications: job.qualifications,
-          description: job.description,
+          qualifications: job.qualifications || "",
+          description: job.description || "",
           requiredSkills: (job.requiredSkills || []).join(", "),
         });
       } catch (err) {
         console.error("❌ Error loading job:", err);
-        alert("Failed to load job details. Try refreshing the page.");
+        setErrorMsg("⚠️ Failed to load job details. Please try again.");
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    };
+    fetchJob();
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [id, apiBase]);
+
+  /** ===========================
+   *  Input handler
+   *  =========================== */
+  const onChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }, []);
+
+  /** ===========================
+   *  Submit job update
+   *  =========================== */
+  const onSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      if (loading) return;
+
+      setLoading(true);
+      setErrorMsg("");
+
+      try {
+        const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
+        if (token)
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        axios.defaults.baseURL = apiBase;
+
+        const payload = {
+          ...form,
+          requiredSkills: form.requiredSkills
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        };
+
+        await axios.put(`/api/jobs/${id}`, payload);
+
+        
+        navigate("/admin");
+      } catch (err) {
+        console.error("❌ Error updating job:", err);
+        setErrorMsg("❌ Failed to update job. Please check inputs or backend.");
       } finally {
         setLoading(false);
       }
-    };
+    },
+    [form, id, navigate, apiBase, loading]
+  );
 
-    fetchJob();
-  }, [id]);
-
-  // ✅ Handle form changes
-  const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-
-  // ✅ Update job via backend
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      setLoading(true);
-
-      const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-      if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-      const updatedData = { ...form };
-      await axios.put(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`, updatedData);
-
-      alert("✅ Job updated successfully!");
-      navigate("/admin");
-    } catch (err) {
-      console.error("❌ Error updating job:", err);
-      alert("Failed to update job. Please check console for details.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  /** ===========================
+   *  UI Render
+   *  =========================== */
+  if (loading && !form.title && !errorMsg) {
     return (
       <div className="min-vh-100 d-flex justify-content-center align-items-center text-muted">
         <div className="spinner-border text-primary me-2" role="status" />
@@ -82,31 +126,50 @@ const AdminJobEdit = () => {
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
-      {/* Navbar */}
-      <nav className="navbar navbar-expand-lg navbar-dark" style={{ background: "#0B3D6E" }}>
+      {/* ===== Navbar ===== */}
+      <nav
+        className="navbar navbar-expand-lg navbar-dark"
+        style={{ background: "#0B3D6E" }}
+      >
         <div className="container-fluid">
           <span className="navbar-brand">NITC Job Portal – Admin</span>
           <ul className="navbar-nav ms-auto">
             <li className="nav-item">
-              <Link className="nav-link" to="/admin">Dashboard</Link>
+              <Link className="nav-link" to="/admin">
+                Dashboard
+              </Link>
             </li>
             <li className="nav-item">
-              <Link className="nav-link" to="/admin/applications">Applications</Link>
+              <Link className="nav-link" to="/admin/applications">
+                Applications
+              </Link>
             </li>
             <li className="nav-item">
-              <Link className="nav-link text-warning" to="/">Logout</Link>
+              <Link className="nav-link text-warning" to="/">
+                Logout
+              </Link>
             </li>
           </ul>
         </div>
       </nav>
 
-      {/* Body */}
+      {/* ===== Body ===== */}
       <div className="container py-4 flex-grow-1">
-        <div className="card shadow-sm border-0 mx-auto" style={{ maxWidth: 900 }}>
+        <div
+          className="card shadow-sm border-0 mx-auto"
+          style={{ maxWidth: 900 }}
+        >
           <div className="card-header bg-white">
-            <h5 className="mb-0 fw-bold" style={{ color: "#1C4E80" }}>Edit Job</h5>
+            <h5 className="mb-0 fw-bold" style={{ color: "#1C4E80" }}>
+              Edit Job
+            </h5>
           </div>
+
           <div className="card-body">
+            {errorMsg && (
+              <div className="alert alert-danger text-center">{errorMsg}</div>
+            )}
+
             <form onSubmit={onSubmit}>
               <div className="row g-3">
                 {/* Job Title */}
@@ -181,7 +244,9 @@ const AdminJobEdit = () => {
 
                 {/* Required Skills */}
                 <div className="col-12">
-                  <label className="form-label">Required Skills (comma-separated)</label>
+                  <label className="form-label">
+                    Required Skills (comma-separated)
+                  </label>
                   <input
                     name="requiredSkills"
                     value={form.requiredSkills}
@@ -189,29 +254,48 @@ const AdminJobEdit = () => {
                     className="form-control"
                     placeholder="e.g. ReactJS, Node.js, MongoDB"
                   />
+                  <small className="text-muted">
+                    Helps candidates understand expectations.
+                  </small>
                 </div>
               </div>
 
               {/* Buttons */}
-              <div className="d-flex gap-2 mt-4">
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? "Updating..." : "Update Job"}
-                </button>
-                <Link to="/admin" className="btn btn-outline-secondary">
+              <div className="d-flex gap-2 mt-4 justify-content-end">
+                <Link
+                  to="/admin"
+                  className="btn btn-outline-secondary"
+                  disabled={loading}
+                >
                   Cancel
                 </Link>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={
+                    loading ||
+                    !form.title.trim() ||
+                    !form.department.trim() ||
+                    !form.deadline.trim()
+                  }
+                >
+                  {loading ? "Updating..." : "Update Job"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       </div>
 
-      {/* Footer */}
+      {/* ===== Footer ===== */}
       <footer className="text-center py-3 mt-auto bg-dark text-white">
-        <small>© {new Date().getFullYear()} NITC Job Portal Admin.</small>
+        <small>
+          © {new Date().getFullYear()} NITC Job Portal Admin. All rights
+          reserved.
+        </small>
       </footer>
     </div>
   );
-};
+});
 
 export default AdminJobEdit;

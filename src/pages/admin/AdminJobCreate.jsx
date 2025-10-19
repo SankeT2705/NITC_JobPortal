@@ -1,10 +1,16 @@
- import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
-const AdminJobCreate = () => {
+const AdminJobCreate = React.memo(function AdminJobCreate() {
   const navigate = useNavigate();
   const { id } = useParams();
+
+  const apiBase = useMemo(
+    () => process.env.REACT_APP_API_URL || "http://localhost:5000",
+    []
+  );
+
   const [form, setForm] = useState({
     title: "",
     department: "",
@@ -15,64 +21,103 @@ const AdminJobCreate = () => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const isEdit = Boolean(id);
+  const mountedRef = useRef(true);
 
-  // ✅ Load job for editing (if ID present)
+  /** ===============================
+   *  Fetch job details if editing
+   *  =============================== */
   useEffect(() => {
+    mountedRef.current = true;
     const fetchJob = async () => {
       if (!isEdit) return;
       try {
-        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`);
+        setLoading(true);
+        setErrorMsg("");
+
+        const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
+        if (token)
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        axios.defaults.baseURL = apiBase;
+
+        const res = await axios.get(`/api/jobs/${id}`);
+        if (!mountedRef.current) return;
+
         const job = res.data;
         setForm({
-          title: job.title,
-          department: job.department,
-          deadline: job.deadline?.split("T")[0],
-          qualifications: job.qualifications,
-          description: job.description,
+          title: job.title || "",
+          department: job.department || "",
+          deadline: job.deadline?.split("T")[0] || "",
+          qualifications: job.qualifications || "",
+          description: job.description || "",
           requiredSkills: (job.requiredSkills || []).join(", "),
         });
       } catch (err) {
         console.error("Error loading job:", err);
-        alert("⚠️ Failed to load job details.");
+        setErrorMsg("⚠️ Failed to load job details. Please try again.");
+      } finally {
+        if (mountedRef.current) setLoading(false);
       }
     };
     fetchJob();
-  }, [id, isEdit]);
 
-  // ✅ Field Change
-  const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [id, isEdit, apiBase]);
 
-  // ✅ Submit Handler
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const adminUser = JSON.parse(localStorage.getItem("admin_user") || "{}");
-      const adminToken = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
+  /** ===============================
+   *  Input change handler
+   *  =============================== */
+  const onChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }, []);
 
-      // Axios Auth Header
-      if (adminToken)
-        axios.defaults.headers.common["Authorization"] = `Bearer ${adminToken}`;
+  /** ===============================
+   *  Submit handler (Create / Update)
+   *  =============================== */
+  const onSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      if (loading) return;
 
-      const payload = { ...form };
+      setLoading(true);
+      setErrorMsg("");
 
-      if (isEdit) {
-        await axios.put(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`, payload);
-        alert("✅ Job Updated Successfully!");
-      } else {
-        await axios.post(`${process.env.REACT_APP_API_URL}/api/jobs`, payload);
-        alert("✅ Job Created Successfully!");
+      try {
+        const adminToken = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
+        if (adminToken)
+          axios.defaults.headers.common["Authorization"] = `Bearer ${adminToken}`;
+        axios.defaults.baseURL = apiBase;
+
+        const payload = {
+          ...form,
+          requiredSkills: form.requiredSkills
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        };
+
+        if (isEdit) {
+          await axios.put(`/api/jobs/${id}`, payload);
+         
+        } else {
+          await axios.post(`/api/jobs`, payload);
+          
+        }
+
+        navigate("/admin");
+      } catch (err) {
+        console.error("Job creation/update failed:", err);
+        setErrorMsg("❌ Failed to save job. Please check your inputs or network.");
+      } finally {
+        setLoading(false);
       }
-
-      navigate("/admin");
-    } catch (err) {
-      console.error("Job creation/update failed:", err);
-      alert("❌ Failed to save job. Check console for details.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [form, isEdit, id, navigate, apiBase, loading]
+  );
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -105,6 +150,10 @@ const AdminJobCreate = () => {
           </div>
 
           <div className="card-body">
+            {errorMsg && (
+              <div className="alert alert-danger text-center py-2">{errorMsg}</div>
+            )}
+
             <form onSubmit={onSubmit}>
               <div className="row g-3">
                 {/* Title */}
@@ -188,17 +237,32 @@ const AdminJobCreate = () => {
                     className="form-control"
                     placeholder="e.g. Python, ReactJS, Node.js"
                   />
-                  <small className="text-muted">Helps match candidates effectively.</small>
+                  <small className="text-muted">
+                    Helps match candidates effectively.
+                  </small>
                 </div>
               </div>
 
               {/* Buttons */}
               <div className="d-flex gap-2 mt-4 justify-content-end">
-                <Link to="/admin" className="btn btn-outline-secondary">
+                <Link to="/admin" className="btn btn-outline-secondary" disabled={loading}>
                   Cancel
                 </Link>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? "Saving..." : isEdit ? "Update Job" : "Save Job"}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={
+                    loading ||
+                    !form.title.trim() ||
+                    !form.department.trim() ||
+                    !form.deadline.trim()
+                  }
+                >
+                  {loading
+                    ? "Saving..."
+                    : isEdit
+                    ? "Update Job"
+                    : "Save Job"}
                 </button>
               </div>
             </form>
@@ -206,12 +270,14 @@ const AdminJobCreate = () => {
         </div>
       </div>
 
-      {/* Footer */}
+      {/* ======== Footer ======== */}
       <footer className="text-center py-3 mt-auto bg-dark text-white">
-        <small>© {new Date().getFullYear()} NITC Job Portal Admin.</small>
+        <small>
+          © {new Date().getFullYear()} NITC Job Portal Admin. All rights reserved.
+        </small>
       </footer>
     </div>
   );
-};
+});
 
 export default AdminJobCreate;
