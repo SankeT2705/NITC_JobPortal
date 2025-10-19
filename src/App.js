@@ -40,7 +40,7 @@ function App() {
           <Route path="/login-user" element={<UserLogin />} />
           <Route path="/login-admin" element={<AdminLogin />} />
           <Route path="/register-user" element={<UserRegister />} />
-          <Route path="/register-admin" element={<AdminRegister />} />
+          
           <Route path="/request-admin" element={<RequestAdmin />} />
 <Route path="/superadmin-dashboard" element={<SuperAdminDashboard />} />
           {/* Protected User Routes */}
