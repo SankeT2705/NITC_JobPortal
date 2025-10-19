@@ -8,7 +8,7 @@ import axios from "axios";
 const UserDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  // 🔍 Job View Modal
+  // Job View Modal
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewJob, setViewJob] = useState(null);
   const handleViewJob = (job) => {
@@ -46,14 +46,14 @@ const UserDashboard = () => {
           setNotifications(res.data || []);
         }
       } catch (err) {
-        console.error("❌ Failed to load notifications:", err);
+        console.error("Failed to load notifications:", err);
       }
     };
 
     fetchNotifications();
   }, [currentUser?.email]);
 
-  // ✅ Clear notifications in backend
+  // Clear notifications in backend
   const clearNotifications = async () => {
     try {
       axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
@@ -68,11 +68,11 @@ const UserDashboard = () => {
       );
       setNotifications([]);
     } catch (err) {
-      console.error("❌ Failed to clear notifications:", err);
+      console.error(" Failed to clear notifications:", err);
     }
   };
 
-  // ✅ Fetch updated applications from backend
+  // Fetch updated applications from backend
   useEffect(() => {
     const fetchApplications = async () => {
       try {
@@ -97,7 +97,7 @@ const UserDashboard = () => {
           appliedOn: new Date(app.createdAt).toLocaleDateString(),
           status: app.status || "Pending",
           resumeUrl: app.resumeUrl || "",
-          resumeStatus: app.resumeUrl ? "✅ Uploaded" : "❌ Not Uploaded",
+          resumeStatus: app.resumeUrl ? "Uploaded" : " Not Uploaded",
         }));
 
         setApplications(formattedApps);
@@ -106,13 +106,13 @@ const UserDashboard = () => {
           JSON.stringify(formattedApps)
         );
       } catch (err) {
-        console.error("❌ Failed to load user applications:", err);
+        console.error(" Failed to load user applications:", err);
       }
     };
 
     fetchApplications();
 
-    // ✅ Optional auto-refresh every 30s
+    //  Optional auto-refresh every 30s
     const interval = setInterval(fetchApplications, 30000);
     return () => clearInterval(interval);
   }, [userKey]);
@@ -135,10 +135,10 @@ const UserDashboard = () => {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        // ✅ Set base URL (backend)
+        // Set base URL (backend)
         axios.defaults.baseURL = "${process.env.REACT_APP_API_URL}";
 
-        // ✅ Optional: Add token if user logged in
+        //  Optional: Add token if user logged in
         const token = JSON.parse(
           localStorage.getItem("nitc_user") || "{}"
         )?.token;
@@ -150,7 +150,7 @@ const UserDashboard = () => {
         );
         const backendJobs = res.data || [];
 
-        // ✅ Normalize job fields for frontend consistency
+        //  Normalize job fields for frontend consistency
         const formatted = backendJobs.map((job) => ({
           id: job._id, // your local code uses "id"
           title: job.title,
@@ -166,8 +166,8 @@ const UserDashboard = () => {
         setJobs(formatted);
         localStorage.setItem("jobs", JSON.stringify(formatted)); // optional caching
       } catch (err) {
-        console.error("❌ Failed to load jobs:", err);
-        alert("⚠️ Failed to load job listings. Please try again.");
+        console.error(" Failed to load jobs:", err);
+        alert(" Failed to load job listings. Please try again.");
       }
     };
 
@@ -259,13 +259,13 @@ const UserDashboard = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (loading) return; // ✅ Prevent multiple submissions
+    if (loading) return; //  Prevent multiple submissions
 
     try {
-      setLoading(true); // ✅ Start loader
+      setLoading(true); //  Start loader
 
       if (!selectedJob) {
-        alert("⚠️ No job selected.");
+        alert(" No job selected.");
         setLoading(false);
         return;
       }
@@ -315,14 +315,14 @@ const UserDashboard = () => {
       setApplications(nextApps);
       localStorage.setItem(`${userKey}_applications`, JSON.stringify(nextApps));
 
-      // ✅ Reset form + close modal
+      //  Reset form + close modal
       setFormData({ name: "", email: "", resumeFile: null, coverLetter: "" });
       setShowModal(false);
     } catch (err) {
-      console.error("❌ Application submit failed:", err);
-      alert("❌ Failed to submit application. Please try again.");
+      console.error(" Application submit failed:", err);
+      alert(" Failed to submit application. Please try again.");
     } finally {
-      setLoading(false); // ✅ Always stop loader
+      setLoading(false); // Always stop loader
     }
   };
 
@@ -357,7 +357,7 @@ const UserDashboard = () => {
         <div className="container-fluid">
           <span className="navbar-brand fw-semibold">NITC Job Portal</span>
 
-          {/* 🔽 Add Toggler for mobile */}
+          {/*  Add Toggler for mobile */}
           <button
             className="navbar-toggler"
             type="button"
@@ -370,7 +370,7 @@ const UserDashboard = () => {
             <span className="navbar-toggler-icon"></span>
           </button>
 
-          {/* 🔽 Wrap nav links inside collapse container */}
+          {/* Wrap nav links inside collapse container */}
           <div className="collapse navbar-collapse" id="navbarSupportedContent">
             <ul className="navbar-nav ms-auto align-items-center">
               <li className="nav-item">
@@ -441,7 +441,7 @@ const UserDashboard = () => {
                 </div>
                 <div className="card-body">
                   <div className="text-muted small mb-2">
-                    💡 Recommendations improve when admins specify{" "}
+                     Recommendations improve when admins specify{" "}
                     <em>Required Skills</em>.
                   </div>
                   <div className="row">

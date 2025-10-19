@@ -17,6 +17,10 @@ const LoginSelection = () => {
             Login as Admin
           </Link>
         </div>
+        <p className="mt-3">
+  Want to become an admin? <Link to="/request-admin">Request Access</Link>
+</p>
+
         <div className="mt-3">
           <small>
             Don’t have an account?{" "}

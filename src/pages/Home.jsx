@@ -56,7 +56,9 @@ const Home = () => {
             A centralized recruitment platform for posting jobs, applying online,
             and managing the hiring process seamlessly at NIT Calicut.
           </p>
-         
+          <p className="lead mb-4 mx-auto">
+                <Link className="nav-link" to="/select-login">Lets Start..</Link>
+          </p>
         </div>
       </section>
 

@@ -24,6 +24,10 @@ import AdminApplications from "./pages/admin/AdminApplications";
 // Context
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RequestAdmin from "./pages/RequestAdmin";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+
+
 
 function App() {
   return (
@@ -37,7 +41,8 @@ function App() {
           <Route path="/login-admin" element={<AdminLogin />} />
           <Route path="/register-user" element={<UserRegister />} />
           <Route path="/register-admin" element={<AdminRegister />} />
-
+          <Route path="/request-admin" element={<RequestAdmin />} />
+<Route path="/superadmin-dashboard" element={<SuperAdminDashboard />} />
           {/* Protected User Routes */}
           <Route
             path="/dashboard-user"

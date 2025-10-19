@@ -15,16 +15,15 @@ const AdminLogin = () => {
     setLoading(true);
 
     try {
-      // ✅ Use backend API for login
+      //Use backend API for login
       const admin = await login("admin", email, password);
 
       if (admin) {
-        alert(`✅ Welcome back, ${admin.name || "Admin"}!`);
         navigate("/admin");
       }
     } catch (err) {
       const message =
-        err.response?.data?.message || "❌ Invalid admin credentials.";
+        err.response?.data?.message || "Invalid admin credentials.";
       alert(message);
       console.error("Admin login error:", err);
     } finally {

@@ -2,19 +2,23 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
+import { Modal, Button, Form } from "react-bootstrap";
 
 const AdminDashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  // ✅ Current Admin Info
   const currentAdmin = JSON.parse(localStorage.getItem("admin_user") || "{}");
   const adminName = currentAdmin?.name || "Admin";
 
-  // ✅ States
   const [jobs, setJobs] = useState([]);
   const [stats, setStats] = useState({ activeJobs: 0, totalApplications: 0 });
   const [loading, setLoading] = useState(true);
+
+  // ✅ Password modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // ✅ Fetch Jobs + Stats
   useEffect(() => {
@@ -25,13 +29,10 @@ const AdminDashboard = () => {
         const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
         if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-        // Fetch Admin Jobs
-        // ✅ Fetch only this admin’s jobs
-const jobsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/admin/${currentAdmin.email}`);
-setJobs(jobsRes.data || []);
+        const jobsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/jobs/admin/${currentAdmin.email}`);
+        setJobs(jobsRes.data || []);
 
-// ✅ Fetch only this admin’s applications
-const appsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/admin/${currentAdmin.email}`);
+        const appsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/applications/admin/${currentAdmin.email}`);
         setStats({
           activeJobs: jobsRes.data?.length || 0,
           totalApplications: appsRes.data?.length || 0,
@@ -50,18 +51,42 @@ const appsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/applicatio
   // ✅ Delete a Job
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this job?")) return;
-
     try {
       await axios.delete(`${process.env.REACT_APP_API_URL}/api/jobs/${id}`);
       alert("🗑️ Job deleted successfully!");
       setJobs((prev) => prev.filter((job) => job._id !== id));
-      setStats((prev) => ({
-        ...prev,
-        activeJobs: prev.activeJobs - 1,
-      }));
+      setStats((prev) => ({ ...prev, activeJobs: prev.activeJobs - 1 }));
     } catch (err) {
       console.error("❌ Error deleting job:", err);
       alert("Failed to delete job.");
+    }
+  };
+
+  // ✅ Change Password
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) {
+      alert("⚠️ Password must be at least 6 characters long");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
+      if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/auth/update-password`, {
+        newPassword,
+      });
+
+      alert("✅ Password updated successfully!");
+      setShowPasswordModal(false);
+      setNewPassword("");
+    } catch (err) {
+      console.error("❌ Error updating password:", err);
+      alert("Failed to update password. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -105,8 +130,14 @@ const appsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/applicatio
               <p className="text-muted small mb-3">
                 Manage job postings and review applications efficiently.
               </p>
-              <button className="btn btn-warning fw-semibold w-100" onClick={handleCreateJob}>
+              <button className="btn btn-warning fw-semibold w-100 mb-2" onClick={handleCreateJob}>
                 + Create New Job
+              </button>
+              <button
+                className="btn btn-outline-primary fw-semibold w-100"
+                onClick={() => setShowPasswordModal(true)}
+              >
+                Change Password
               </button>
             </div>
 
@@ -185,6 +216,35 @@ const appsRes = await axios.get(`${process.env.REACT_APP_API_URL}/api/applicatio
           </div>
         </div>
       </div>
+
+      {/* ===== Password Change Modal ===== */}
+      <Modal show={showPasswordModal} onHide={() => setShowPasswordModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Change Password</Modal.Title>
+        </Modal.Header>
+        <Form onSubmit={handlePasswordChange}>
+          <Modal.Body>
+            <Form.Group className="mb-3">
+              <Form.Label>New Password</Form.Label>
+              <Form.Control
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                required
+              />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowPasswordModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={saving}>
+              {saving ? "Updating..." : "Update Password"}
+            </Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
 
       {/* ===== Footer ===== */}
       <footer className="text-center py-3 mt-auto bg-dark text-white">

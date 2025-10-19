@@ -16,7 +16,7 @@ const AdminRegister = () => {
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  // ✅ Register Admin via Backend API
+  //Register Admin via Backend API
   const handleRegister = async (e) => {
     e.preventDefault();
 
@@ -30,12 +30,12 @@ const AdminRegister = () => {
       });
 
       if (res.data) {
-        alert("✅ Admin registered successfully! Please login.");
+      
         navigate("/login-admin");
       }
     } catch (err) {
       const message =
-        err.response?.data?.message || "❌ Registration failed. Try again.";
+        err.response?.data?.message || "Registration failed. Try again.";
       alert(message);
       console.error("Admin registration error:", err);
     }
