@@ -1,22 +1,16 @@
+     
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Modal, Button, Form } from "react-bootstrap";
 import { useAuth } from "../context/AuthContext";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
-import axios from "axios";
 
 const UserProfile = React.memo(function UserProfile() {
-  const apiBase = process.env.REACT_APP_API_URL || "http://localhost:5000";
-const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-
-axios.defaults.baseURL = apiBase;
-if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  /** ---------------- Load Current User ---------------- */
+  /** ---------------- Load Current User (memoized) ---------------- */
   const storedUser = useMemo(
     () => JSON.parse(localStorage.getItem("current_user") || "{}"),
     []
@@ -37,7 +31,9 @@ if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     try {
       const saved = localStorage.getItem(`${userKey}_profile`);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch {
+      // ignore parse errors
+    }
     return {
       name: currentUser?.name || "User",
       email: currentUser?.email || "Not Available",
@@ -58,13 +54,6 @@ if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   const [newSkill, setNewSkill] = useState("");
   const [showSkillModal, setShowSkillModal] = useState(false);
 
-  /** ---------------- Edit Profile Modal ---------------- */
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({
-    name: user.name,
-    department: user.department,
-  });
-
   /** ---------------- Persist Profile & Skills ---------------- */
   useEffect(() => {
     try {
@@ -80,73 +69,18 @@ if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
   /** ---------------- Handlers ---------------- */
   const handleAddSkill = useCallback(
-  async (e) => {
-    e.preventDefault();
-    const skill = newSkill.trim();
-    if (!skill) return;
-
-    try {
-      const res = await axios.post("/api/users/skills", { skill });
-      setSkills(res.data.skills);
-    } catch (err) {
-      console.error("Add skill error:", err);
-      alert("❌ Failed to add skill");
-    }
-    setNewSkill("");
-    setShowSkillModal(false);
-  },
-  [newSkill]
-);
-
-
-  const handleRemoveSkill = useCallback(
-  async (skillToRemove) => {
-    if (!window.confirm(`Remove "${skillToRemove}"?`)) return;
-    try {
-      const res = await axios.delete(`/api/users/skills/${skillToRemove}`);
-      setSkills(res.data.skills);
-    } catch (err) {
-      console.error("Delete skill error:", err);
-      alert("❌ Failed to delete skill");
-    }
-  },
-  []
-);
-
-   const handleEditSave = useCallback(
-  async (e) => {
-    e.preventDefault();
-    const { name, department } = editForm;
-    if (!name.trim() || !department.trim()) {
-      alert("All fields are required!");
-      return;
-    }
-
-    try {
-      const res = await axios.put("/api/users/profile", { name, department });
-      const updatedUser = res.data.user;
-
-      // ✅ Update state
-      setUser(updatedUser);
-
-      // ✅ Update local profile
-      localStorage.setItem(`${userKey}_profile`, JSON.stringify(updatedUser));
-
-      // ✅ Update the main user cache used by Dashboard
-      const storedUser = JSON.parse(localStorage.getItem("current_user") || "{}");
-      const mergedUser = { ...storedUser, name: updatedUser.name, department: updatedUser.department };
-      localStorage.setItem("current_user", JSON.stringify(mergedUser));
-
-      
-      setShowEditModal(false);
-    } catch (err) {
-      console.error("Update error:", err);
-      alert("❌ Failed to update profile");
-    }
-  },
-  [editForm, userKey]
-);
-
+    (e) => {
+      e.preventDefault();
+      const skill = newSkill.trim();
+      if (!skill) return;
+      if (!skills.includes(skill)) {
+        setSkills((prev) => [...prev, skill]);
+      }
+      setNewSkill("");
+      setShowSkillModal(false);
+    },
+    [newSkill, skills]
+  );
 
   const handleLogout = useCallback(() => {
     logout();
@@ -210,13 +144,7 @@ if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
           className="card shadow-lg border-0 p-4 mx-auto"
           style={{ maxWidth: "600px", borderRadius: "16px" }}
         >
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h4 className="fw-bold text-primary mb-0">User Profile</h4>
-            <Button variant="outline-primary" size="sm" onClick={() => setShowEditModal(true)}>
-              ✏️ Edit
-            </Button>
-          </div>
-
+          <h4 className="fw-bold text-primary mb-4">User Profile</h4>
           <div className="mb-3">
             <p className="mb-1">
               <strong>Full Name:</strong> {user.name}
@@ -236,18 +164,8 @@ if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
             {skills.length > 0 ? (
               <ul className="list-group list-group-flush mb-3">
                 {skills.map((skill, index) => (
-                  <li
-                    key={index}
-                    className="list-group-item d-flex justify-content-between align-items-center"
-                  >
+                  <li key={index} className="list-group-item">
                     {skill}
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => handleRemoveSkill(skill)}
-                    >
-                      ✖
-                    </Button>
                   </li>
                 ))}
               </ul>
@@ -259,7 +177,7 @@ if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
               className="mt-2 fw-semibold"
               onClick={() => setShowSkillModal(true)}
             >
-              + Add Skill
+              Add Skills
             </Button>
           </div>
         </div>
@@ -299,56 +217,9 @@ if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
         </Form>
       </Modal>
 
-      {/* Edit Profile Modal */}
-      <Modal
-        show={showEditModal}
-        onHide={() => setShowEditModal(false)}
-        centered
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>Edit Profile</Modal.Title>
-        </Modal.Header>
-        <Form onSubmit={handleEditSave}>
-          <Modal.Body>
-            <Form.Group className="mb-3">
-              <Form.Label>Full Name</Form.Label>
-              <Form.Control
-                type="text"
-                value={editForm.name}
-                onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, name: e.target.value }))
-                }
-                required
-              />
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Department</Form.Label>
-              <Form.Control
-                type="text"
-                value={editForm.department}
-                onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, department: e.target.value }))
-                }
-                required
-              />
-            </Form.Group>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowEditModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit">
-              Save Changes
-            </Button>
-          </Modal.Footer>
-        </Form>
-      </Modal>
-
       {/* Footer */}
       <footer className="bg-primary text-white text-center py-3 mt-auto">
-        <small>
-          © {new Date().getFullYear()} NITC Job Portal User. All rights reserved.
-        </small>
+        <small>© {new Date().getFullYear()} NITC Job Portal User. All rights reserved.</small>
       </footer>
     </div>
   );
