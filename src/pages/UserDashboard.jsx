@@ -37,6 +37,18 @@ const UserDashboard = React.memo(function UserDashboard() {
   const api = useAxiosClient();
   const [previewUrl, setPreviewUrl] = useState(null);
 
+  /** ---------- lightweight page-scoped alert/toast ---------- */
+  const [alerts, setAlerts] = useState([]);
+  const pushAlert = useCallback((message, variant = "info", timeout = 4000) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setAlerts((a) => [...a, { id, message, variant }]);
+    if (timeout) {
+      window.setTimeout(() => {
+        setAlerts((a) => a.filter((t) => t.id !== id));
+      }, timeout);
+    }
+  }, []);
+
   /** ---------- user bootstrap (memoized) ---------- */
   const storedUser = useMemo(
     () => JSON.parse(localStorage.getItem("current_user") || "{}"),
@@ -129,13 +141,13 @@ const UserDashboard = React.memo(function UserDashboard() {
         }
       } catch (e) {
         console.error("Failed to load jobs:", e);
-        alert(" Failed to load job listings. Please try again.");
+        pushAlert("Failed to load job listings. Please try again.", "danger");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [api]);
+  }, [api, pushAlert]);
 
   /** ---------- applications ---------- */
   const [applications, setApplications] = useState(() => {
@@ -247,29 +259,51 @@ const UserDashboard = React.memo(function UserDashboard() {
     }
   }, [userKey]);
 
+  /** robust skill normalizer: strings/arrays/objects -> tokens */
+  const normalizeSkills = useCallback((value) => {
+    if (value == null) return [];
+    const asArray = Array.isArray(value)
+      ? value
+      : String(value).split(/[,\|\/;+]+/);
+    const pick = (v) => {
+      if (v == null) return [];
+      if (typeof v === "string") return v.split(/[,\|\/;+]+/);
+      if (typeof v === "object") {
+        const raw = v.name ?? v.label ?? v.skill ?? v.value ?? "";
+        return String(raw).split(/[,\|\/;+]+/);
+      }
+      return String(v).split(/[,\|\/;+]+/);
+    };
+    return asArray
+      .flatMap(pick)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }, []);
+
   const recommendedJobs = useMemo(() => {
     if (!userSkills?.length || !jobs.length) return [];
-    const lowerSkills = userSkills.map((u) => u.toLowerCase());
+    const userTokens = normalizeSkills(userSkills);
+    if (!userTokens.length) return [];
     const appSet = new Set(applications.map((a) => a.jobId));
     return jobs
       .map((job) => {
-        const reqSkills = job.requiredSkills || [];
+        const reqTokens = normalizeSkills(job.requiredSkills || []);
         const alreadyApplied = appSet.has(job.id);
-        const skillMatches = reqSkills.filter((s) =>
-          lowerSkills.includes(String(s).toLowerCase())
+        const titleLc = job.title?.toLowerCase?.() || "";
+        const deptLc = job.department?.toLowerCase?.() || "";
+        const skillMatches = reqTokens.filter((t) =>
+          userTokens.includes(t)
         ).length;
-        const fallbackMatches = lowerSkills.filter(
-          (u) =>
-            job.title.toLowerCase().includes(u) ||
-            job.department.toLowerCase().includes(u)
+        const fallbackMatches = userTokens.filter(
+          (u) => titleLc.includes(u) || deptLc.includes(u)
         ).length;
-        const totalScore = skillMatches * 10 + fallbackMatches;
-        return { job, score: totalScore, alreadyApplied };
+        const score = skillMatches * 10 + fallbackMatches;
+        return { job, score, alreadyApplied };
       })
-      .filter((j) => !j.alreadyApplied && j.score > 0)
+      .filter((x) => !x.alreadyApplied && x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .map((j) => j.job);
-  }, [jobs, userSkills, applications]);
+      .map((x) => x.job);
+  }, [applications, jobs, normalizeSkills, userSkills]);
 
   /** ---------- apply flow ---------- */
   const [showModal, setShowModal] = useState(false);
@@ -285,13 +319,13 @@ const UserDashboard = React.memo(function UserDashboard() {
     (job) => {
       const alreadyApplied = applications.some((app) => app.jobId === job.id);
       if (alreadyApplied) {
-        alert("You have already applied for this job.");
+        pushAlert("You have already applied for this job.", "warning");
         return;
       }
       setSelectedJob(job);
       setShowModal(true);
     },
-    [applications]
+    [applications, pushAlert]
   );
 
   const fileReaderRef = useRef(null);
@@ -328,12 +362,12 @@ const UserDashboard = React.memo(function UserDashboard() {
       e.preventDefault();
       if (loading) return;
       if (!selectedJob) {
-        alert(" No job selected.");
+        pushAlert("No job selected.", "warning");
         return;
       }
       const token = getToken();
       if (!token) {
-        alert("Please log in to apply for a job.");
+        pushAlert("Please log in to apply for a job.", "warning");
         return;
       }
 
@@ -345,8 +379,9 @@ const UserDashboard = React.memo(function UserDashboard() {
           resumeUrl: formData.resumeFile,
         };
         const { data } = await api.post(`/api/applications/apply`, payload);
-        alert(
-          `✅ Application submitted successfully for: ${selectedJob.title}`
+        pushAlert(
+          `Application submitted successfully for: ${selectedJob.title}`,
+          "success"
         );
 
         const newApplication = {
@@ -372,7 +407,7 @@ const UserDashboard = React.memo(function UserDashboard() {
         setShowModal(false);
       } catch (err) {
         console.error("Application submit failed:", err);
-        alert(" Failed to submit application. Please try again.");
+        pushAlert("Failed to submit application. Please try again.", "danger");
       } finally {
         setLoading(false);
       }
@@ -386,6 +421,7 @@ const UserDashboard = React.memo(function UserDashboard() {
       loading,
       selectedJob,
       userKey,
+      pushAlert,
     ]
   );
 
@@ -395,18 +431,21 @@ const UserDashboard = React.memo(function UserDashboard() {
     navigate("/");
   }, [navigate]);
 
-  const handleViewResume = useCallback((url) => {
-    if (!url) {
-      alert("⚠️ No resume found for this applicant.");
-      return;
-    }
-    setPreviewUrl(url);
-    // Scroll smoothly to preview area
-    setTimeout(() => {
-      const preview = document.getElementById("resume-preview");
-      if (preview) preview.scrollIntoView({ behavior: "smooth" });
-    }, 200);
-  }, []);
+  const handleViewResume = useCallback(
+    (url) => {
+      if (!url) {
+        pushAlert("No resume found for this applicant.", "warning");
+        return;
+      }
+      setPreviewUrl(url);
+      // Scroll smoothly to preview area
+      window.requestAnimationFrame(() => {
+        const preview = document.getElementById("resume-preview");
+        if (preview) preview.scrollIntoView({ behavior: "smooth" });
+      });
+    },
+    [pushAlert]
+  );
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -683,36 +722,32 @@ const UserDashboard = React.memo(function UserDashboard() {
           </div>
         </div>
       </div>
+
       {previewUrl && (
-  <div
-    id="resume-preview"
-    className="mt-4 card shadow-sm border-0 p-3"
-  >
-    <h6 className="fw-bold text-primary mb-3">
-      Resume Preview
-    </h6>
-    <iframe
-      src={previewUrl}
-      title="Resume Preview"
-      width="100%"
-      height="600px"
-      style={{
-        border: "2px solid #0B3D6E",
-        borderRadius: "6px",
-        backgroundColor: "#f8f9fa",
-      }}
-    ></iframe>
-    <div className="text-end mt-2">
-      <Button
-        variant="outline-secondary"
-        size="sm"
-        onClick={() => setPreviewUrl(null)}
-      >
-        Close Preview
-      </Button>
-    </div>
-  </div>
-)}
+        <div id="resume-preview" className="mt-4 card shadow-sm border-0 p-3">
+          <h6 className="fw-bold text-primary mb-3">Resume Preview</h6>
+          <iframe
+            src={previewUrl}
+            title="Resume Preview"
+            width="100%"
+            height="600px"
+            style={{
+              border: "2px solid #0B3D6E",
+              borderRadius: "6px",
+              backgroundColor: "#f8f9fa",
+            }}
+          ></iframe>
+          <div className="text-end mt-2">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => setPreviewUrl(null)}
+            >
+              Close Preview
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* View Job Details Modal */}
       <Modal
@@ -830,6 +865,37 @@ const UserDashboard = React.memo(function UserDashboard() {
           </Modal.Footer>
         </Form>
       </Modal>
+
+      {/* page-scoped alert host */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1080 }}>
+        {alerts.map((t) => (
+          <div
+            key={t.id}
+            className={`toast show align-items-center text-white bg-${
+              t.variant === "danger"
+                ? "danger"
+                : t.variant === "warning"
+                ? "warning text-dark"
+                : t.variant === "success"
+                ? "success"
+                : "info"
+            } border-0 mb-2`}
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            <div className="d-flex">
+              <div className="toast-body">{t.message}</div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() => setAlerts((a) => a.filter((x) => x.id !== t.id))}
+                aria-label="Close"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Footer */}
       <footer className="bg-primary text-white text-center py-3 mt-auto">

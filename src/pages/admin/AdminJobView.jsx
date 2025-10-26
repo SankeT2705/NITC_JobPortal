@@ -8,53 +8,76 @@ import React, {
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const AdminJobView = React.memo(function AdminJobView() {
-  const { id } = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const [job, setJob] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const mountedRef = useRef(true);
+/** ========== Axios Client ========== */
+const useAxiosClient = () => {
   const apiBase = useMemo(
     () => process.env.REACT_APP_API_URL || "http://localhost:5000",
     []
   );
+  const token = useMemo(
+    () => JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token || null,
+    []
+  );
 
-  /** ===========================
-   *  Fetch Job Data (with cache)
-   *  =========================== */
+  return useMemo(() => {
+    const client = axios.create({
+      baseURL: apiBase,
+      timeout: 15000,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    return client;
+  }, [apiBase, token]);
+};
+
+/** ========== Component ========== */
+const AdminJobView = React.memo(function AdminJobView() {
+  const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const api = useAxiosClient();
+
+  const [job, setJob] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [alerts, setAlerts] = useState([]);
+  const mountedRef = useRef(true);
+
+  /** ========== Toast Alerts ========== */
+  const pushAlert = useCallback((message, variant = "info", timeout = 4000) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setAlerts((prev) => [...prev, { id, message, variant }]);
+    if (timeout)
+      setTimeout(() => {
+        setAlerts((prev) => prev.filter((a) => a.id !== id));
+      }, timeout);
+  }, []);
+
+  /** ========== Fetch Job (with cache) ========== */
   const fetchJob = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMsg("");
 
-      // Fast path: use cached job from navigation state
+      // ⚡ Use cached state from router if available
       if (location.state && mountedRef.current) {
         setJob(location.state);
         setLoading(false);
         return;
       }
 
-      const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-      if (token)
-        axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      axios.defaults.baseURL = apiBase;
-
-      const res = await axios.get(`/api/jobs/${id}`);
+      const { data } = await api.get(`/api/jobs/${id}`);
       if (!mountedRef.current) return;
 
-      setJob(res.data || null);
+      setJob(data || null);
     } catch (err) {
-      console.error("❌ Error fetching job:", err);
-      setErrorMsg("⚠️ Failed to load job details. Please try again.");
+      console.error("Error fetching job:", err);
       setJob(null);
+      setErrorMsg("Failed to load job details. Please try again.");
+      pushAlert("Failed to load job details.", "danger");
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [id, location.state, apiBase]);
+  }, [id, location.state, api, pushAlert]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -64,23 +87,21 @@ const AdminJobView = React.memo(function AdminJobView() {
     };
   }, [fetchJob]);
 
-  /** ===========================
-   *  Handlers
-   *  =========================== */
+  /** ========== Navigation Handlers ========== */
   const handleEdit = useCallback(() => {
-    if (job)
-      navigate(`/admin/jobs/${job._id}/edit`, {
-        state: job,
-      });
-  }, [job, navigate]);
+    if (job) {
+      pushAlert("Opening job editor...", "info", 2000);
+      setTimeout(() => {
+        navigate(`/admin/jobs/${job._id}/edit`, { state: job });
+      }, 300);
+    }
+  }, [job, navigate, pushAlert]);
 
   const handleBack = useCallback(() => {
     navigate("/admin");
   }, [navigate]);
 
-  /** ===========================
-   *  Render States
-   *  =========================== */
+  /** ========== Render States ========== */
   if (loading) {
     return (
       <div className="min-vh-100 d-flex justify-content-center align-items-center text-muted">
@@ -108,9 +129,7 @@ const AdminJobView = React.memo(function AdminJobView() {
     );
   }
 
-  /** ===========================
-   *  Main UI
-   *  =========================== */
+  /** ========== Main UI ========== */
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
       {/* ===== Navbar ===== */}
@@ -163,29 +182,62 @@ const AdminJobView = React.memo(function AdminJobView() {
             <h6 className="text-secondary">Job Description</h6>
             <p>{job.description || "Not provided"}</p>
 
-            {Array.isArray(job.requiredSkills) && job.requiredSkills.length > 0 && (
-              <>
-                <h6 className="text-secondary">Required Skills</h6>
-                <div className="d-flex flex-wrap gap-2 mb-3">
-                  {job.requiredSkills.map((skill, index) => (
-                    <span key={index} className="badge bg-info text-dark">
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
+            {Array.isArray(job.requiredSkills) &&
+              job.requiredSkills.length > 0 && (
+                <>
+                  <h6 className="text-secondary">Required Skills</h6>
+                  <div className="d-flex flex-wrap gap-2 mb-3">
+                    {job.requiredSkills.map((skill, index) => (
+                      <span key={index} className="badge bg-info text-dark">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
 
             <div className="d-flex gap-2 mt-3">
               <button className="btn btn-warning" onClick={handleEdit}>
                 Edit Job
               </button>
-              <button className="btn btn-outline-secondary" onClick={handleBack}>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={handleBack}
+              >
                 Back to Dashboard
               </button>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ===== Toast Host ===== */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1080 }}>
+        {alerts.map((t) => (
+          <div
+            key={t.id}
+            className={`toast show align-items-center text-white bg-${
+              t.variant === "danger"
+                ? "danger"
+                : t.variant === "success"
+                ? "success"
+                : "info"
+            } border-0 mb-2`}
+            role="alert"
+          >
+            <div className="d-flex">
+              <div className="toast-body">{t.message}</div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() =>
+                  setAlerts((a) => a.filter((x) => x.id !== t.id))
+                }
+                aria-label="Close"
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* ===== Footer ===== */}

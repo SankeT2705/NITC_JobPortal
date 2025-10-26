@@ -5,14 +5,26 @@ import { useAuth } from "../context/AuthContext";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import axios from "axios";
+
 const apiBase = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-
 axios.defaults.baseURL = apiBase;
 if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
 const UserProfile = React.memo(function UserProfile() {
   const navigate = useNavigate();
   const { logout } = useAuth();
+
+  /** ---------------- Alerts (Bootstrap Toasts) ---------------- */
+  const [alerts, setAlerts] = useState([]);
+  const pushAlert = useCallback((message, variant = "info", timeout = 4000) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setAlerts((prev) => [...prev, { id, message, variant }]);
+    if (timeout)
+      setTimeout(() => {
+        setAlerts((prev) => prev.filter((t) => t.id !== id));
+      }, timeout);
+  }, []);
 
   /** ---------------- Load Current User ---------------- */
   const storedUser = useMemo(
@@ -25,7 +37,11 @@ const UserProfile = React.memo(function UserProfile() {
   );
 
   const currentUser = useMemo(() => {
-    return allUsers.find((u) => u.email === storedUser.email) || storedUser || {};
+    return (
+      allUsers.find((u) => u.email === storedUser.email) ||
+      storedUser ||
+      {}
+    );
   }, [allUsers, storedUser]);
 
   const userKey = currentUser?.email || "guest_user";
@@ -52,7 +68,6 @@ const UserProfile = React.memo(function UserProfile() {
       return [];
     }
   });
-
   const [newSkill, setNewSkill] = useState("");
   const [showSkillModal, setShowSkillModal] = useState(false);
 
@@ -78,72 +93,85 @@ const UserProfile = React.memo(function UserProfile() {
 
   /** ---------------- Handlers ---------------- */
   const handleAddSkill = useCallback(
-  async (e) => {
-    e.preventDefault();
-    const skill = newSkill.trim();
-    if (!skill) return;
+    async (e) => {
+      e.preventDefault();
+      const skill = newSkill.trim();
+      if (!skill) {
+        pushAlert("Please enter a valid skill.", "warning");
+        return;
+      }
 
-    try {
-      const res = await axios.post("/api/users/skills", { skill });
-      setSkills(res.data.skills);
-    } catch (err) {
-      console.error("Add skill error:", err);
-      alert("❌ Failed to add skill");
-    }
-    setNewSkill("");
-    setShowSkillModal(false);
-  },
-  [newSkill]
-);
+      const formattedSkill =
+        skill.charAt(0).toUpperCase() + skill.slice(1).toLowerCase();
 
- const handleRemoveSkill = useCallback(
-  async (skillToRemove) => {
-    if (!window.confirm(`Remove "${skillToRemove}"?`)) return;
-    try {
-      const res = await axios.delete(`/api/users/skills/${skillToRemove}`);
-      setSkills(res.data.skills);
-    } catch (err) {
-      console.error("Delete skill error:", err);
-      alert("❌ Failed to delete skill");
-    }
-  },
-  []
-);
+      try {
+        const res = await axios.post("/api/users/skills", {
+          skill: formattedSkill,
+        });
+        setSkills(res.data?.skills || [...skills, formattedSkill]);
+        pushAlert(`Skill "${formattedSkill}" added.`, "success");
+      } catch (err) {
+        console.error("Add skill error:", err);
+        pushAlert("Failed to add skill.", "danger");
+      }
+      setNewSkill("");
+      setShowSkillModal(false);
+    },
+    [newSkill, skills, pushAlert]
+  );
 
-   const handleEditSave = useCallback(
-  async (e) => {
-    e.preventDefault();
-    const { name, department } = editForm;
-    if (!name.trim() || !department.trim()) {
-      alert("All fields are required!");
-      return;
-    }
+  const handleRemoveSkill = useCallback(
+    async (skillToRemove) => {
+      try {
+        const res = await axios.delete(`/api/users/skills/${skillToRemove}`);
+        setSkills(res.data?.skills || skills.filter((s) => s !== skillToRemove));
+        pushAlert(`Skill "${skillToRemove}" removed.`, "info");
+      } catch (err) {
+        console.error("Delete skill error:", err);
+        pushAlert("Failed to delete skill.", "danger");
+      }
+    },
+    [skills, pushAlert]
+  );
 
-    try {
-      const res = await axios.put("/api/users/profile", { name, department });
-      const updatedUser = res.data.user;
+  const handleEditSave = useCallback(
+    async (e) => {
+      e.preventDefault();
+      const { name, department } = editForm;
+      if (!name.trim() || !department.trim()) {
+        pushAlert("All fields are required!", "warning");
+        return;
+      }
 
-      // ✅ Update state
-      setUser(updatedUser);
+      try {
+        const res = await axios.put("/api/users/profile", {
+          name,
+          department,
+        });
+        const updatedUser = res.data?.user || { ...user, name, department };
 
-      // ✅ Update local profile
-      localStorage.setItem(`${userKey}_profile`, JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        localStorage.setItem(`${userKey}_profile`, JSON.stringify(updatedUser));
 
-      // ✅ Update the main user cache used by Dashboard
-      const storedUser = JSON.parse(localStorage.getItem("current_user") || "{}");
-      const mergedUser = { ...storedUser, name: updatedUser.name, department: updatedUser.department };
-      localStorage.setItem("current_user", JSON.stringify(mergedUser));
+        const storedUser = JSON.parse(
+          localStorage.getItem("current_user") || "{}"
+        );
+        const mergedUser = {
+          ...storedUser,
+          name: updatedUser.name,
+          department: updatedUser.department,
+        };
+        localStorage.setItem("current_user", JSON.stringify(mergedUser));
 
-      alert("✅ Profile updated!");
-      setShowEditModal(false);
-    } catch (err) {
-      console.error("Update error:", err);
-      alert("❌ Failed to update profile");
-    }
-  },
-  [editForm, userKey]
-);
-
+        pushAlert("Profile updated successfully.", "success");
+        setShowEditModal(false);
+      } catch (err) {
+        console.error("Update error:", err);
+        pushAlert("Failed to update profile.", "danger");
+      }
+    },
+    [editForm, userKey, pushAlert, user]
+  );
 
   const handleLogout = useCallback(() => {
     logout();
@@ -209,7 +237,11 @@ const UserProfile = React.memo(function UserProfile() {
         >
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h4 className="fw-bold text-primary mb-0">User Profile</h4>
-            <Button variant="outline-primary" size="sm" onClick={() => setShowEditModal(true)}>
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={() => setShowEditModal(true)}
+            >
               ✏️ Edit
             </Button>
           </div>
@@ -263,11 +295,7 @@ const UserProfile = React.memo(function UserProfile() {
       </div>
 
       {/* Add Skill Modal */}
-      <Modal
-        show={showSkillModal}
-        onHide={() => setShowSkillModal(false)}
-        centered
-      >
+      <Modal show={showSkillModal} onHide={() => setShowSkillModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Add New Skill</Modal.Title>
         </Modal.Header>
@@ -283,10 +311,7 @@ const UserProfile = React.memo(function UserProfile() {
             />
           </Modal.Body>
           <Modal.Footer>
-            <Button
-              variant="secondary"
-              onClick={() => setShowSkillModal(false)}
-            >
+            <Button variant="secondary" onClick={() => setShowSkillModal(false)}>
               Cancel
             </Button>
             <Button variant="success" type="submit">
@@ -297,11 +322,7 @@ const UserProfile = React.memo(function UserProfile() {
       </Modal>
 
       {/* Edit Profile Modal */}
-      <Modal
-        show={showEditModal}
-        onHide={() => setShowEditModal(false)}
-        centered
-      >
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Edit Profile</Modal.Title>
         </Modal.Header>
@@ -324,7 +345,10 @@ const UserProfile = React.memo(function UserProfile() {
                 type="text"
                 value={editForm.department}
                 onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, department: e.target.value }))
+                  setEditForm((prev) => ({
+                    ...prev,
+                    department: e.target.value,
+                  }))
                 }
                 required
               />
@@ -341,10 +365,42 @@ const UserProfile = React.memo(function UserProfile() {
         </Form>
       </Modal>
 
+      {/* Toast Host */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1080 }}>
+        {alerts.map((t) => (
+          <div
+            key={t.id}
+            className={`toast show align-items-center text-white bg-${
+              t.variant === "danger"
+                ? "danger"
+                : t.variant === "warning"
+                ? "warning text-dark"
+                : t.variant === "success"
+                ? "success"
+                : "info"
+            } border-0 mb-2`}
+            role="alert"
+          >
+            <div className="d-flex">
+              <div className="toast-body">{t.message}</div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() =>
+                  setAlerts((a) => a.filter((x) => x.id !== t.id))
+                }
+                aria-label="Close"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Footer */}
       <footer className="bg-primary text-white text-center py-3 mt-auto">
         <small>
-          © {new Date().getFullYear()} NITC Job Portal User. All rights reserved.
+          © {new Date().getFullYear()} NITC Job Portal User. All rights
+          reserved.
         </small>
       </footer>
     </div>

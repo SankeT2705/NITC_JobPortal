@@ -2,15 +2,45 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Link, useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const AdminJobEdit = React.memo(function AdminJobEdit() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-
+/** === Centralized Axios Client Hook === */
+const useAxiosClient = () => {
   const apiBase = useMemo(
     () => process.env.REACT_APP_API_URL || "http://localhost:5000",
     []
   );
+  const token = useMemo(
+    () => JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token || null,
+    []
+  );
 
+  return useMemo(() => {
+    const client = axios.create({
+      baseURL: apiBase,
+      timeout: 15000,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    return client;
+  }, [apiBase, token]);
+};
+
+const AdminJobEdit = React.memo(function AdminJobEdit() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const api = useAxiosClient();
+  const mountedRef = useRef(true);
+
+  /** === Toast System === */
+  const [alerts, setAlerts] = useState([]);
+  const pushAlert = useCallback((message, variant = "info", timeout = 4000) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setAlerts((a) => [...a, { id, message, variant }]);
+    if (timeout)
+      setTimeout(() => {
+        setAlerts((a) => a.filter((t) => t.id !== id));
+      }, timeout);
+  }, []);
+
+  /** === State === */
   const [form, setForm] = useState({
     title: "",
     department: "",
@@ -19,14 +49,10 @@ const AdminJobEdit = React.memo(function AdminJobEdit() {
     description: "",
     requiredSkills: "",
   });
-
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const mountedRef = useRef(true);
 
-  /** ===========================
-   *  Fetch job details
-   *  =========================== */
+  /** === Fetch Job Details === */
   useEffect(() => {
     mountedRef.current = true;
     const fetchJob = async () => {
@@ -34,15 +60,10 @@ const AdminJobEdit = React.memo(function AdminJobEdit() {
         setLoading(true);
         setErrorMsg("");
 
-        const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-        if (token)
-          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-        axios.defaults.baseURL = apiBase;
-
-        const res = await axios.get(`/api/jobs/${id}`);
+        const { data } = await api.get(`/api/jobs/${id}`);
         if (!mountedRef.current) return;
 
-        const job = res.data || {};
+        const job = data || {};
         setForm({
           title: job.title || "",
           department: job.department || "",
@@ -52,30 +73,27 @@ const AdminJobEdit = React.memo(function AdminJobEdit() {
           requiredSkills: (job.requiredSkills || []).join(", "),
         });
       } catch (err) {
-        console.error("❌ Error loading job:", err);
-        setErrorMsg("⚠️ Failed to load job details. Please try again.");
+        console.error("Error loading job:", err);
+        setErrorMsg("Failed to load job details. Please try again.");
+        pushAlert("Failed to load job details.", "danger");
       } finally {
         if (mountedRef.current) setLoading(false);
       }
     };
-    fetchJob();
 
+    fetchJob();
     return () => {
       mountedRef.current = false;
     };
-  }, [id, apiBase]);
+  }, [api, id, pushAlert]);
 
-  /** ===========================
-   *  Input handler
-   *  =========================== */
+  /** === Form Input Handler === */
   const onChange = useCallback((e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }, []);
 
-  /** ===========================
-   *  Submit job update
-   *  =========================== */
+  /** === Submit Handler === */
   const onSubmit = useCallback(
     async (e) => {
       e.preventDefault();
@@ -85,11 +103,6 @@ const AdminJobEdit = React.memo(function AdminJobEdit() {
       setErrorMsg("");
 
       try {
-        const token = JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token;
-        if (token)
-          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-        axios.defaults.baseURL = apiBase;
-
         const payload = {
           ...form,
           requiredSkills: form.requiredSkills
@@ -98,23 +111,23 @@ const AdminJobEdit = React.memo(function AdminJobEdit() {
             .filter(Boolean),
         };
 
-        await axios.put(`/api/jobs/${id}`, payload);
+        await api.put(`/api/jobs/${id}`, payload);
+        pushAlert("✅ Job updated successfully!", "success");
 
-        
-        navigate("/admin");
+        // Delay navigation slightly for better UX
+        setTimeout(() => navigate("/admin"), 800);
       } catch (err) {
-        console.error("❌ Error updating job:", err);
-        setErrorMsg("❌ Failed to update job. Please check inputs or backend.");
+        console.error("Error updating job:", err);
+        setErrorMsg("Failed to update job. Please check inputs or network.");
+        pushAlert("Failed to update job.", "danger");
       } finally {
         setLoading(false);
       }
     },
-    [form, id, navigate, apiBase, loading]
+    [api, form, id, loading, navigate, pushAlert]
   );
 
-  /** ===========================
-   *  UI Render
-   *  =========================== */
+  /** === Loading UI === */
   if (loading && !form.title && !errorMsg) {
     return (
       <div className="min-vh-100 d-flex justify-content-center align-items-center text-muted">
@@ -265,7 +278,7 @@ const AdminJobEdit = React.memo(function AdminJobEdit() {
                 <Link
                   to="/admin"
                   className="btn btn-outline-secondary"
-                  disabled={loading}
+                  aria-disabled={loading}
                 >
                   Cancel
                 </Link>
@@ -285,6 +298,35 @@ const AdminJobEdit = React.memo(function AdminJobEdit() {
             </form>
           </div>
         </div>
+      </div>
+
+      {/* ===== Toast Host ===== */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1080 }}>
+        {alerts.map((t) => (
+          <div
+            key={t.id}
+            className={`toast show align-items-center text-white bg-${
+              t.variant === "danger"
+                ? "danger"
+                : t.variant === "success"
+                ? "success"
+                : "info"
+            } border-0 mb-2`}
+            role="alert"
+          >
+            <div className="d-flex">
+              <div className="toast-body">{t.message}</div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() =>
+                  setAlerts((a) => a.filter((x) => x.id !== t.id))
+                }
+                aria-label="Close"
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* ===== Footer ===== */}

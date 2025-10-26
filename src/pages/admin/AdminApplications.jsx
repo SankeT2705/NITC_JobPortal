@@ -9,19 +9,44 @@ import { Link, useNavigate } from "react-router-dom";
 import { Modal, Button, Spinner, Badge } from "react-bootstrap";
 import axios from "axios";
 
-const AdminApplications = React.memo(function AdminApplications() {
-  const navigate = useNavigate();
-
-  const adminUser = useMemo(
-    () => JSON.parse(localStorage.getItem("admin_user") || "{}"),
-    []
-  );
-  const adminToken = useMemo(
-    () => JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token,
-    []
-  );
+/** Reusable axios client */
+const useAxiosClient = () => {
   const apiBase = useMemo(
     () => process.env.REACT_APP_API_URL || "http://localhost:5000",
+    []
+  );
+  const token = useMemo(
+    () => JSON.parse(localStorage.getItem("nitc_user") || "{}")?.token || null,
+    []
+  );
+  return useMemo(() => {
+    const client = axios.create({
+      baseURL: apiBase,
+      timeout: 15000,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    return client;
+  }, [apiBase, token]);
+};
+
+const AdminApplications = React.memo(function AdminApplications() {
+  const navigate = useNavigate();
+  const api = useAxiosClient();
+
+  /** ===== Toast Alert System ===== */
+  const [alerts, setAlerts] = useState([]);
+  const pushAlert = useCallback((message, variant = "info", timeout = 4000) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setAlerts((prev) => [...prev, { id, message, variant }]);
+    if (timeout)
+      setTimeout(() => {
+        setAlerts((prev) => prev.filter((a) => a.id !== id));
+      }, timeout);
+  }, []);
+
+  /** ===== Admin Info ===== */
+  const adminUser = useMemo(
+    () => JSON.parse(localStorage.getItem("admin_user") || "{}"),
     []
   );
 
@@ -31,40 +56,27 @@ const AdminApplications = React.memo(function AdminApplications() {
   const [showModal, setShowModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [previewUrl, setPreviewUrl] = useState(null);
-
   const mountedRef = useRef(true);
 
-  /** ===========================
-   *  Configure axios globally
-   *  =========================== */
-  useEffect(() => {
-    axios.defaults.baseURL = apiBase;
-    if (adminToken)
-      axios.defaults.headers.common["Authorization"] = `Bearer ${adminToken}`;
-  }, [adminToken, apiBase]);
-
-  /** ===========================
-   *  Fetch applications
-   *  =========================== */
+  /** ===== Fetch Applications ===== */
   const fetchApplications = useCallback(async () => {
     if (!adminUser?.email) return;
     setLoading(true);
     setErrorMsg("");
 
     try {
-      const res = await axios.get(`/api/applications/admin/${adminUser.email}`);
-      if (!mountedRef.current) return;
-      setApplications(res.data || []);
+      const { data } = await api.get(`/api/applications/admin/${adminUser.email}`);
+      if (mountedRef.current) {
+        setApplications(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
       console.error("Error fetching applications:", err);
-      setErrorMsg(
-        err.response?.data?.message ||
-          "⚠️ Failed to load applications. Please check your backend connection."
-      );
+      setErrorMsg("Failed to load applications. Please try again.");
+      pushAlert("Failed to load applications.", "danger");
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [adminUser.email]);
+  }, [api, adminUser.email, pushAlert]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -74,46 +86,30 @@ const AdminApplications = React.memo(function AdminApplications() {
     };
   }, [fetchApplications]);
 
-  /** ===========================
-   *  Update application status
-   *  =========================== */
+  /** ===== Update Application Status ===== */
   const updateStatus = useCallback(
     async (id, status) => {
       try {
-        if (!adminToken) {
-          alert("⚠️ Admin not logged in. Please re-login.");
-          return;
-        }
+        await api.put(`/api/applications/${id}/status`, { status });
 
-        const res = await axios.put(`/api/applications/${id}/status`, {
-          status,
-        });
-
-        console.log("✅ Status updated:", res.data);
-
-        // Update local state instead of refetching whole list
         setApplications((prev) =>
-          prev.map((app) => (app._id === id ? { ...app, status: status } : app))
+          prev.map((app) => (app._id === id ? { ...app, status } : app))
         );
 
-        // If modal is open and same app updated, reflect immediately
         if (selectedApp && selectedApp._id === id) {
           setSelectedApp((prev) => ({ ...prev, status }));
         }
+
+        pushAlert(`Application marked as ${status}.`, "success");
       } catch (err) {
-        console.error("❌ Status update failed:", err);
-        alert(
-          err.response?.data?.message ||
-            "❌ Failed to update application status. Please try again."
-        );
+        console.error("Status update failed:", err);
+        pushAlert("Failed to update status.", "danger");
       }
     },
-    [adminToken, selectedApp]
+    [api, selectedApp, pushAlert]
   );
 
-  /** ===========================
-   *  Modal control
-   *  =========================== */
+  /** ===== Modal & Navigation ===== */
   const openModal = useCallback((app) => {
     setSelectedApp(app);
     setShowModal(true);
@@ -124,18 +120,18 @@ const AdminApplications = React.memo(function AdminApplications() {
     localStorage.removeItem("nitc_user");
     navigate("/");
   }, [navigate]);
+
   const handleViewResume = useCallback((url) => {
     if (!url) {
-      alert("⚠️ No resume found for this applicant.");
+      pushAlert("No resume found for this applicant.", "warning");
       return;
     }
     setPreviewUrl(url);
-    // Scroll smoothly to preview area
     setTimeout(() => {
       const preview = document.getElementById("resume-preview");
       if (preview) preview.scrollIntoView({ behavior: "smooth" });
     }, 200);
-  }, []);
+  }, [pushAlert]);
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -281,44 +277,36 @@ const AdminApplications = React.memo(function AdminApplications() {
           </div>
         </div>
       </div>
-       {previewUrl && (
-  <div
-    id="resume-preview"
-    className="mt-4 card shadow-sm border-0 p-3"
-  >
-    <h6 className="fw-bold text-primary mb-3">
-      Resume Preview
-    </h6>
-    <iframe
-      src={previewUrl}
-      title="Resume Preview"
-      width="100%"
-      height="600px"
-      style={{
-        border: "2px solid #0B3D6E",
-        borderRadius: "6px",
-        backgroundColor: "#f8f9fa",
-      }}
-    ></iframe>
-    <div className="text-end mt-2">
-      <Button
-        variant="outline-secondary"
-        size="sm"
-        onClick={() => setPreviewUrl(null)}
-      >
-        Close Preview
-      </Button>
-    </div>
-  </div>
-)}
 
-      {/* ===== Modal ===== */}
-      <Modal
-        show={showModal}
-        onHide={() => setShowModal(false)}
-        centered
-        size="lg"
-      >
+      {/* ===== Resume Preview ===== */}
+      {previewUrl && (
+        <div id="resume-preview" className="mt-4 card shadow-sm border-0 p-3">
+          <h6 className="fw-bold text-primary mb-3">Resume Preview</h6>
+          <iframe
+            src={previewUrl}
+            title="Resume Preview"
+            width="100%"
+            height="600px"
+            style={{
+              border: "2px solid #0B3D6E",
+              borderRadius: "6px",
+              backgroundColor: "#f8f9fa",
+            }}
+          ></iframe>
+          <div className="text-end mt-2">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => setPreviewUrl(null)}
+            >
+              Close Preview
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Details Modal ===== */}
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Application Details</Modal.Title>
         </Modal.Header>
@@ -393,6 +381,37 @@ const AdminApplications = React.memo(function AdminApplications() {
           </Button>
         </Modal.Footer>
       </Modal>
+
+      {/* ===== Toast Host ===== */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1080 }}>
+        {alerts.map((t) => (
+          <div
+            key={t.id}
+            className={`toast show align-items-center text-white bg-${
+              t.variant === "danger"
+                ? "danger"
+                : t.variant === "warning"
+                ? "warning text-dark"
+                : t.variant === "success"
+                ? "success"
+                : "info"
+            } border-0 mb-2`}
+            role="alert"
+          >
+            <div className="d-flex">
+              <div className="toast-body">{t.message}</div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() =>
+                  setAlerts((a) => a.filter((x) => x.id !== t.id))
+                }
+                aria-label="Close"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* ===== Footer ===== */}
       <footer className="text-center py-3 mt-auto bg-dark text-white">

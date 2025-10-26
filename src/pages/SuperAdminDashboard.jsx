@@ -1,26 +1,53 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { Table, Button, Container, Spinner, Card } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
+/** ==============================
+ *   AXIOS CLIENT (Reusable)
+ *  ============================== */
+const useAxiosClient = () => {
+  const apiBase = useMemo(
+    () => process.env.REACT_APP_API_URL || "http://localhost:5000",
+    []
+  );
+  return useMemo(
+    () =>
+      axios.create({
+        baseURL: apiBase,
+        timeout: 10000,
+      }),
+    [apiBase]
+  );
+};
+
 const SuperAdminDashboard = React.memo(function SuperAdminDashboard() {
+  const api = useAxiosClient();
+
+  /** ====== STATE ====== */
   const [requests, setRequests] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
+  const [alerts, setAlerts] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0); // For controlled refresh
 
-  //Fetch both pending requests & current admins (memoized for efficiency)
+  /** ====== TOAST ALERTS ====== */
+  const pushAlert = useCallback((message, variant = "info", timeout = 4000) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setAlerts((prev) => [...prev, { id, message, variant }]);
+    if (timeout)
+      setTimeout(() => {
+        setAlerts((prev) => prev.filter((a) => a.id !== id));
+      }, timeout);
+  }, []);
+
+  /** ====== FETCH REQUESTS + ADMINS ====== */
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      setActionMessage("");
-
-      const { data } = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/superadmin/requests`,
-        { timeout: 8000 }
-      );
+      const { data } = await api.get("/api/superadmin/requests");
 
       if (data) {
         const pending = (data.requests || []).filter(
@@ -31,54 +58,63 @@ const SuperAdminDashboard = React.memo(function SuperAdminDashboard() {
       }
     } catch (err) {
       console.error("❌ Failed to fetch data:", err);
-      setActionMessage("⚠️ Failed to load data. Please check your network.");
+      pushAlert(
+        "⚠️ Failed to load data. Please check your network or server.",
+        "danger"
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [api, pushAlert]);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, refreshKey]);
 
-  //Handle Accept/Reject
-  const handleAction = async (id, action) => {
-    if (!window.confirm(`Are you sure you want to ${action} this request?`))
-      return;
-    try {
-      setLoading(true);
-      const { data } = await axios.post(
-        `${process.env.REACT_APP_API_URL}/api/superadmin/handle/${id}`,
-        { action }
-      );
-      setActionMessage(data?.message || `✅ Request ${action}ed successfully.`);
-      await fetchData();
-    } catch (err) {
-      console.error("❌ Error handling request:", err);
-      setActionMessage("❌ Failed to update admin request.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  /** ====== HANDLE ACCEPT / REJECT ====== */
+  const handleAction = useCallback(
+    async (id, action) => {
+      try {
+        setLoading(true);
+        const { data } = await api.post(`/api/superadmin/handle/${id}`, {
+          action,
+        });
+        pushAlert(
+          data?.message || `✅ Request ${action}ed successfully.`,
+          "success"
+        );
+        setRefreshKey((k) => k + 1);
+      } catch (err) {
+        console.error("❌ Error handling request:", err);
+        pushAlert("❌ Failed to update admin request.", "danger");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, pushAlert]
+  );
 
-  // ✅ Handle Delete Admin
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this admin?")) return;
-    try {
-      setLoading(true);
-      const { data } = await axios.delete(
-        `${process.env.REACT_APP_API_URL}/api/superadmin/delete-admin/${id}`
-      );
-      setActionMessage(data?.message || "✅ Admin deleted successfully.");
-      await fetchData();
-    } catch (err) {
-      console.error("❌ Error deleting admin:", err);
-      setActionMessage("⚠️ Failed to delete admin.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  /** ====== HANDLE DELETE ADMIN ====== */
+  const handleDelete = useCallback(
+    async (id) => {
+      try {
+        setLoading(true);
+        const { data } = await api.delete(
+          `/api/superadmin/delete-admin/${id}`
+        );
+        pushAlert(data?.message || "✅ Admin deleted successfully.", "success");
+        setRefreshKey((k) => k + 1);
+      } catch (err) {
+        console.error("❌ Error deleting admin:", err);
+        pushAlert("⚠️ Failed to delete admin.", "danger");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, pushAlert]
+  );
 
+  /** ====== RENDER ====== */
   return (
     <div className="d-flex flex-column min-vh-100 bg-light">
       {/* Navbar */}
@@ -98,7 +134,10 @@ const SuperAdminDashboard = React.memo(function SuperAdminDashboard() {
           >
             <span className="navbar-toggler-icon"></span>
           </button>
-          <div className="collapse navbar-collapse justify-content-end" id="navbarNav">
+          <div
+            className="collapse navbar-collapse justify-content-end"
+            id="navbarNav"
+          >
             <ul className="navbar-nav">
               <li className="nav-item">
                 <Link className="nav-link" to="/">
@@ -126,18 +165,6 @@ const SuperAdminDashboard = React.memo(function SuperAdminDashboard() {
             <div className="text-center my-3">
               <Spinner animation="border" role="status" />
             </div>
-          )}
-
-          {actionMessage && (
-            <p
-              className={`text-center fw-semibold ${
-                actionMessage.startsWith("✅")
-                  ? "text-success"
-                  : "text-danger"
-              }`}
-            >
-              {actionMessage}
-            </p>
           )}
 
           {/* Pending Admin Requests */}
@@ -242,6 +269,35 @@ const SuperAdminDashboard = React.memo(function SuperAdminDashboard() {
           </Table>
         </Card>
       </Container>
+
+      {/* Toast Notifications */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1080 }}>
+        {alerts.map((t) => (
+          <div
+            key={t.id}
+            className={`toast show align-items-center text-white bg-${
+              t.variant === "danger"
+                ? "danger"
+                : t.variant === "success"
+                ? "success"
+                : "info"
+            } border-0 mb-2`}
+            role="alert"
+          >
+            <div className="d-flex">
+              <div className="toast-body">{t.message}</div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() =>
+                  setAlerts((a) => a.filter((x) => x.id !== t.id))
+                }
+                aria-label="Close"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Footer */}
       <footer className="bg-dark text-white text-center py-3 mt-auto">
