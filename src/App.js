@@ -4,11 +4,11 @@ import "./App.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
-// Context & Components (✅ moved to top)
+// Context
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-// ✅ Lazy-load pages for better performance
+//Lazy-load pages for better performance
 const Home = lazy(() => import("./pages/Home"));
 const LoginSelection = lazy(() => import("./pages/LoginSelection"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
@@ -40,7 +40,7 @@ function App() {
           }
         >
           <Routes>
-            {/* 🌐 Public Routes */}
+            {/*Public Routes */}
             <Route path="/" element={<Home />} />
             <Route path="/select-login" element={<LoginSelection />} />
             <Route path="/login-user" element={<UserLogin />} />
@@ -52,7 +52,7 @@ function App() {
               element={<SuperAdminDashboard />}
             />
 
-            {/* 👤 Protected User Routes */}
+            {/*Protected User Routes */}
             <Route
               path="/dashboard-user"
               element={
@@ -70,7 +70,7 @@ function App() {
               }
             />
 
-            {/* 🧑‍💼 Protected Admin Routes */}
+            {/* Protected Admin Routes */}
             <Route
               path="/admin"
               element={
@@ -112,7 +112,7 @@ function App() {
               }
             />
 
-            {/* ⚠️ Fallback 404 */}
+            {/*Fallback 404 */}
             <Route
               path="*"
               element={

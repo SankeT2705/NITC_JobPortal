@@ -14,10 +14,10 @@ const NotificationBell = React.memo(function NotificationBell({
 }) {
   const [show, setShow] = useState(false);
 
-  // ✅ Memoize unread count to avoid recalculations
+  //Memoize unread count to avoid recalculations
   const unreadCount = useMemo(() => notifications.length, [notifications]);
 
-  // ✅ Handle dropdown toggle (React-Bootstrap provides nextShow param)
+  // Handle dropdown toggle (React-Bootstrap provides nextShow param)
   const handleToggle = useCallback(
     (nextShow) => {
       setShow(nextShow);
@@ -25,7 +25,7 @@ const NotificationBell = React.memo(function NotificationBell({
     [setShow]
   );
 
-  // ✅ Stable clear handler
+  //Stable clear handler
   const handleClear = useCallback(() => {
     onClear();
     setShow(false);

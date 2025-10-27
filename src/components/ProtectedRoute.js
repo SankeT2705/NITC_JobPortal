@@ -13,7 +13,7 @@ const ProtectedRoute = React.memo(({ children, allowedRoles = [] }) => {
   const { user } = useAuth();
   const location = useLocation();
 
-  // ✅ Memoize derived state for performance
+  //Memoize derived state for performance
   const { isLoggedIn, isAuthorized } = useMemo(() => {
     const role = user?.role || null;
     return {
@@ -22,7 +22,7 @@ const ProtectedRoute = React.memo(({ children, allowedRoles = [] }) => {
     };
   }, [user, allowedRoles]);
 
-  // ✅ Loading fallback (helps during refresh or context rehydration)
+  //Loading fallback (helps during refresh or context rehydration)
   if (user === undefined) {
     return (
       <div className="vh-100 d-flex justify-content-center align-items-center text-muted">
@@ -32,17 +32,17 @@ const ProtectedRoute = React.memo(({ children, allowedRoles = [] }) => {
     );
   }
 
-  // ✅ Not logged in → redirect to login, preserving attempted path
+  //Not logged in → redirect to login, preserving attempted path
   if (!isLoggedIn) {
     return <Navigate to="/select-login" state={{ from: location }} replace />;
   }
 
-  // ✅ Logged in but unauthorized → redirect home
+  //Logged in but unauthorized → redirect home
   if (!isAuthorized) {
     return <Navigate to="/" replace />;
   }
 
-  // ✅ Access granted
+  //Access granted
   return children;
 });
 
